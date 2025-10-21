@@ -81,16 +81,6 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
                 <Input id="password" type="password" required
                   value={password} onChange={(e) => setPassword(e.target.value)} />
               </Field>
-
-              <Field>
-                <Button type="submit" className="w-full" disabled={loading !== null}>
-                  {loading === "email" ? "Ingresando..." : "Login"}
-                </Button>
-                <FieldDescription className="text-center">
-                  Don&apos;t have an account? <a href="/signup" className="underline">Sign up</a>
-                </FieldDescription>
-              </Field>
-
               {msg && <p className="text-sm text-red-600 text-center pt-2">{msg}</p>}
             </FieldGroup>
           </form>
