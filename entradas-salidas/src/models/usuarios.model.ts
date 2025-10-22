@@ -2,6 +2,7 @@ export type Rol = "admin" | "lider" | "empleado";
 export type Empresas = "NETCOL" | "TRIANGULUM" | "INTEEGRA";
 export interface Empleado {
     id: string;              // = uid Auth
+    uid?: string;
     nombre: string;
     correo: string;
     rol: Rol;
@@ -12,4 +13,5 @@ export interface Empleado {
     creadoEn: Date;
     empresa: Empresas;    // id de la empresa
     proyectos?: string[];     // ids de proyectos asignados
+    password?: string;
 }
