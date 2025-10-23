@@ -1,17 +1,16 @@
 export type Rol = "admin" | "lider" | "empleado";
 export type Empresas = "NETCOL" | "TRIANGULUM" | "INTEEGRA";
+
 export interface Empleado {
-    id: string;              // = uid Auth
-    uid?: string;
+    id: string;                    // uid de Firebase Auth
     nombre: string;
     correo: string;
     rol: Rol;
     activo: boolean;
-    // opcionales útiles:
-    documento?: string;          // CC/NIT
+    salarioBaseMensual: number;
+    documento?: string;
     area?: string;
-    creadoEn: Date;
-    empresa: Empresas;    // id de la empresa
-    proyectos?: string[];     // ids de proyectos asignados
-    password?: string;
+    empresa: Empresas;
+    proyectos?: string[];
+    creadoEn: Date;                // ojo: en Firestore es Timestamp -> convertir a Date en el cliente
 }

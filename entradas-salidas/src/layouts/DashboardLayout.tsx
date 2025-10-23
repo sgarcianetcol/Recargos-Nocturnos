@@ -10,11 +10,14 @@ import {
     SidebarMenuItem,
     SidebarMenuButton,
 } from "@/components/ui/sidebar"; // Ajusta según dónde tengas tus componentes
-import { BarChart3, Users } from "lucide-react";
+import { BarChart3, Bolt, Calculator, Calendar, Users } from "lucide-react";
 
 const menuItems = [
     { title: "Resumen", icon: BarChart3, href: "/dashboard", isActive: false },
     { title: "Usuarios", icon: Users, href: "/usuarios", isActive: false },
+    { title: "Calcular", icon: Calculator, href: "/calculadora", isActive: false },
+    { title: "Calendario", icon: Calendar, href: "/calendario", isActive: false },
+    { title: "Configuración", icon: Bolt, href: "/configuracion", isActive: false },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {

@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { Edit, Trash2, KeyRound, Plus } from "lucide-react";
+import { Edit, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -27,20 +27,18 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { getAuth, createUserWithEmailAndPassword, updatePassword } from "firebase/auth";
+import { getAuth } from "firebase/auth";
 
 export default function UsuariosTable() {
   const [empleados, setEmpleados] = React.useState<Empleado[]>([]);
   const [open, setOpen] = React.useState(false);
   const [openEdit, setOpenEdit] = React.useState(false);
-  const [openPass, setOpenPass] = React.useState(false);
   const [nuevo, setNuevo] = React.useState<Partial<Empleado>>({
     rol: "empleado",
     empresa: "NETCOL",
   });
   const [editando, setEditando] = React.useState<Empleado | null>(null);
   const [search, setSearch] = React.useState("");
-  const [newPassword, setNewPassword] = React.useState("");
   const [filtroRol, setFiltroRol] = React.useState<string>("todos");
   const [filtroEmpresa, setFiltroEmpresa] = React.useState<string>("todas");
 
@@ -51,22 +49,17 @@ export default function UsuariosTable() {
 
   // ✅ Crear empleado con Firebase Auth + Firestore
   const guardar = async () => {
-    if (!nuevo.nombre || !nuevo.correo || !nuevo.password) {
+    if (!nuevo.nombre || !nuevo.correo) {
       alert("Por favor completa todos los campos, incluida la contraseña.");
+      return;
+    } if (typeof nuevo.salarioBaseMensual !== "number" || nuevo.salarioBaseMensual <= 0) {
+      alert("Ingresa un salario base mensual válido.");
       return;
     }
 
     try {
       const auth = getAuth();
 
-      // 1️⃣ Crear usuario en Firebase Authentication
-      const cred = await createUserWithEmailAndPassword(
-        auth,
-        nuevo.correo!,
-        nuevo.password!
-      );
-
-      // 2️⃣ Guardar datos adicionales en Firestore
       await EmpleadoService.crear({
         nombre: nuevo.nombre!,
         correo: nuevo.correo!,
@@ -74,7 +67,7 @@ export default function UsuariosTable() {
         rol: nuevo.rol || "empleado",
         empresa: nuevo.empresa || "NETCOL",
         activo: true,
-        uid: cred.user.uid, 
+        salarioBaseMensual: Number(nuevo.salarioBaseMensual),
       });
 
       alert("Empleado creado correctamente ✅");
@@ -95,25 +88,6 @@ export default function UsuariosTable() {
     setEmpleados(updated);
   };
 
-  // ✅ Cambiar contraseña (Auth + Firestore)
-  const cambiarContrasena = async () => {
-    if (!editando || !newPassword) return alert("Escribe la nueva contraseña");
-
-    try {
-      const auth = getAuth();
-      const user = auth.currentUser;
-      if (user) {
-        await updatePassword(user, newPassword);
-      }
-
-      await EmpleadoService.actualizar(editando.id!, { password: newPassword });
-      setOpenPass(false);
-      setNewPassword("");
-      alert("Contraseña actualizada correctamente ✅");
-    } catch (error: any) {
-      alert("Error al cambiar contraseña: " + error.message);
-    }
-  };
 
   const eliminar = async (id: string) => {
     if (confirm("¿Eliminar este empleado?")) {
@@ -123,11 +97,11 @@ export default function UsuariosTable() {
   };
 
   const filtrados = empleados.filter((e) => {
-  const coincideNombre = e.nombre?.toLowerCase().includes(search.toLowerCase());
-  const coincideRol = filtroRol === "todos" || e.rol === filtroRol;
-  const coincideEmpresa = filtroEmpresa === "todas" || e.empresa === filtroEmpresa;
-  return coincideNombre && coincideRol && coincideEmpresa;
-});
+    const coincideNombre = e.nombre?.toLowerCase().includes(search.toLowerCase());
+    const coincideRol = filtroRol === "todos" || e.rol === filtroRol;
+    const coincideEmpresa = filtroEmpresa === "todas" || e.empresa === filtroEmpresa;
+    return coincideNombre && coincideRol && coincideEmpresa;
+  });
 
 
   return (
@@ -138,39 +112,39 @@ export default function UsuariosTable() {
       </div>
 
       <div className="flex flex-wrap gap-3 items-center">
-  <Input
-    placeholder="Buscar por nombre..."
-    value={search}
-    onChange={(e) => setSearch(e.target.value)}
-    className="max-w-sm"
-  />
+        <Input
+          placeholder="Buscar por nombre..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="max-w-sm"
+        />
 
-  <Select value={filtroRol} onValueChange={(v) => setFiltroRol(v)}>
-    <SelectTrigger className="w-[180px]">
-      <SelectValue placeholder="Filtrar por rol" />
-    </SelectTrigger>
-    <SelectContent>
-      <SelectItem value="todos">Todos los roles</SelectItem>
-      <SelectItem value="admin">Admin</SelectItem>
-      <SelectItem value="lider">Líder</SelectItem>
-      <SelectItem value="empleado">Empleado</SelectItem>
-    </SelectContent>
-  </Select>
+        <Select value={filtroRol} onValueChange={(v) => setFiltroRol(v)}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Filtrar por rol" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Todos los roles</SelectItem>
+            <SelectItem value="admin">Admin</SelectItem>
+            <SelectItem value="lider">Líder</SelectItem>
+            <SelectItem value="empleado">Empleado</SelectItem>
+          </SelectContent>
+        </Select>
 
-  <Select value={filtroEmpresa} onValueChange={(v) => setFiltroEmpresa(v)}>
-    <SelectTrigger className="w-[180px]">
-      <SelectValue placeholder="Filtrar por empresa" />
-    </SelectTrigger>
-    <SelectContent>
-      <SelectItem value="todas">Todas las empresas</SelectItem>
-      <SelectItem value="NETCOL">NETCOL</SelectItem>
-      <SelectItem value="TRIANGULUM">TRIANGULUM</SelectItem>
-      <SelectItem value="INTEEGRA">INTEEGRA</SelectItem>
-    </SelectContent>
-  </Select>
-</div>
+        <Select value={filtroEmpresa} onValueChange={(v) => setFiltroEmpresa(v)}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Filtrar por empresa" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todas">Todas las empresas</SelectItem>
+            <SelectItem value="NETCOL">NETCOL</SelectItem>
+            <SelectItem value="TRIANGULUM">TRIANGULUM</SelectItem>
+            <SelectItem value="INTEEGRA">INTEEGRA</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
 
-      
+
 
       <Table>
         <TableHeader>
@@ -193,29 +167,21 @@ export default function UsuariosTable() {
               <TableCell>{e.activo ? "Sí" : "No"}</TableCell>
               <TableCell className="space-x-2">
                 <div className="flex items-center gap-2">
-  <Button
-    size="icon"
-    onClick={() => {
-      setEditando(e);
-      setOpenEdit(true);
-    }}>
-    <Edit className="w-4 h-4" />
-  </Button>
-   <Button
-    size="icon"
-    onClick={() => {
-      setEditando(e);
-      setOpenPass(true);
-    }}>
-    <KeyRound className="w-4 h-4" />
-  </Button>
-  <Button
-    size="icon"
-    variant="destructive"
-    onClick={() => eliminar(e.id!)}>
-    <Trash2 className="w-4 h-4" />
-  </Button>
-</div>
+                  <Button
+                    size="icon"
+                    onClick={() => {
+                      setEditando(e);
+                      setOpenEdit(true);
+                    }}>
+                    <Edit className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="destructive"
+                    onClick={() => eliminar(e.id!)}>
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
 
               </TableCell>
             </TableRow>
@@ -232,28 +198,36 @@ export default function UsuariosTable() {
           <div className="space-y-3 py-3">
             <Input
               placeholder="Nombre"
-              value={nuevo.nombre || ""}
+              value={nuevo.nombre}
               onChange={(e) => setNuevo({ ...nuevo, nombre: e.target.value })}
             />
             <Input
               placeholder="Correo"
               type="email"
-              value={nuevo.correo || ""}
+              value={nuevo.correo}
               onChange={(e) => setNuevo({ ...nuevo, correo: e.target.value })}
             />
             <Input
-              placeholder="Contraseña"
-              type="password"
-              value={nuevo.password || ""}
-              onChange={(e) => setNuevo({ ...nuevo, password: e.target.value })}
-            />
-            <Input
               placeholder="Documento"
-              value={nuevo.documento || ""}
+              value={nuevo.documento}
               onChange={(e) =>
                 setNuevo({ ...nuevo, documento: e.target.value })
               }
             />
+            <Input
+              type="number"
+              inputMode="numeric"
+              placeholder="Salario"
+              value={nuevo.salarioBaseMensual ?? ""}               // 👈 controla con 'nuevo'
+              onChange={(e) =>
+                setNuevo({
+                  ...nuevo,
+                  salarioBaseMensual:
+                    e.target.value === "" ? undefined : Number(e.target.value),  // 👈 evita Number("")
+                })
+              }
+            />
+
             <Select
               value={nuevo.rol}
               onValueChange={(v) =>
@@ -301,18 +275,45 @@ export default function UsuariosTable() {
             <div className="space-y-3 py-3">
               <Input
                 placeholder="Nombre"
-                value={editando.nombre || ""}
+                value={editando.nombre}
                 onChange={(e) =>
                   setEditando({ ...editando, nombre: e.target.value })
                 }
               />
               <Input
                 placeholder="Correo"
-                value={editando.correo || ""}
+                value={editando.correo}
                 onChange={(e) =>
                   setEditando({ ...editando, correo: e.target.value })
                 }
               />
+              <Input
+                type="number"
+                inputMode="numeric"
+                placeholder="Salario"
+                value={nuevo.salarioBaseMensual ?? ""}               // 👈 controla con 'nuevo'
+                onChange={(e) =>
+                  setNuevo({
+                    ...nuevo,
+                    salarioBaseMensual:
+                      e.target.value === "" ? undefined : Number(e.target.value),  // 👈 evita Number("")
+                  })
+                }
+              />
+              {editando && (
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  placeholder="Salario"
+                  value={editando.salarioBaseMensual ?? ""}          // 👈 controla con 'editando'
+                  onChange={(e) =>
+                    setEditando({
+                      ...editando, salarioBaseMensual:
+                        e.target.value === "" ? 0 : Number(e.target.value), // 👈 evita Number("")
+                    })
+                  }
+                />
+              )}
               <Select
                 value={editando.rol}
                 onValueChange={(v) =>
@@ -347,26 +348,6 @@ export default function UsuariosTable() {
           )}
           <DialogFooter>
             <Button onClick={guardarEdicion}>Guardar Cambios</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Cambiar contraseña */}
-      <Dialog open={openPass} onOpenChange={setOpenPass}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Cambiar Contraseña</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-3">
-            <Input
-              type="password"
-              placeholder="Nueva contraseña"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-            />
-          </div>
-          <DialogFooter>
-            <Button onClick={cambiarContrasena}>Actualizar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
