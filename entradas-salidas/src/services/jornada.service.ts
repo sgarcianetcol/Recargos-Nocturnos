@@ -1,20 +1,82 @@
-// src/services/jornada.service.ts
+// src/services/nomina/jornada.service.ts
 import { db } from "@/lib/firebase";
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import {
+    addDoc,
+    collection,
+    collectionGroup,
+    deleteDoc,
+    doc,
+    getDocs,
+    orderBy,
+    query,
+    serverTimestamp,
+    where,
+} from "firebase/firestore";
+
+import type { Empleado } from "@/models/usuarios.model";
 import { TurnosService } from "@/services/turnos.service";
 import { ConfigNominaService } from "@/services/config.service";
-import { esFestivoColombia } from "@/services/festivos.service";
 import { calcularDiaBasico } from "@/services/calculoBasico.service";
-import type { Empleado } from "@/models/usuarios.model";
+import { esDominicalOFestivo } from "@/services/festivos.service";
 
+export interface JornadaDoc {
+    id?: string;
+    userId: string;
+    empresa: Empleado["empresa"];
+
+    fecha: string;         // "YYYY-MM-DD"
+    turnoId: string;       // "M8" | "T8" | ...
+
+    horaEntrada: string;   // "HH:mm"
+    horaSalida: string;    // "HH:mm"
+    cruzoMedianoche: boolean;
+    esDominicalFestivo: boolean;
+
+    // parámetros aplicados
+    salarioBaseAplicado: number;
+    horasLaboralesMesAplicadas: number;
+    tarifaHoraAplicada: number;
+    rulesAplicadas: { nightStartsAt: string; nightEndsAt: string; baseDailyHours: number; roundToMinutes?: number };
+    recargosAplicados: Record<string, number>;
+
+    // horas (en horas decimales)
+    horasNormales: number;
+    recargoNocturnoOrdinario: number;
+    recargoFestivoDiurno: number;
+    recargoFestivoNocturno: number;
+    extrasDiurnas: number;
+    extrasNocturnas: number;
+    extrasDiurnasDominical: number;
+    extrasNocturnasDominical: number;
+    totalHoras: number;
+
+    // valores
+    valorHorasNormales: number;
+    valorRecargoNocturnoOrdinario: number;
+    valorRecargoFestivoDiurno: number;
+    valorRecargoFestivoNocturno: number;
+    valorExtrasDiurnas: number;
+    valorExtrasNocturnas: number;
+    valorExtrasDiurnasDominical: number;
+    valorExtrasNocturnasDominical: number;
+    valorTotalDia: number;
+
+    creadoEn: any;  // serverTimestamp
+    estado: "calculado" | "cerrado";
+}
+
+/**
+ * Crea una jornada calculada y la guarda en:
+ *   usuarios/{empleado.id}/jornadas/{jid}
+ */
 export async function crearJornadaCalculada(opts: {
     empleado: Empleado;
     fecha: string;    // "YYYY-MM-DD"
     turnoId: string;  // "M8" | "T8" | ...
-}) {
+}): Promise<string> {
     const { empleado, fecha, turnoId } = opts;
 
-    // Config, turno, reglas
+    // 1) Config & turno
     const [turno, nominaCfg, recargosCfg, rules] = await Promise.all([
         TurnosService.obtener(turnoId),
         ConfigNominaService.getNomina(),
@@ -23,13 +85,10 @@ export async function crearJornadaCalculada(opts: {
     ]);
     if (!turno) throw new Error("Turno no encontrado");
 
-    // Dominical/Festivo
-    const d = new Date(`${fecha}T00:00:00`);
-    const esDomingo = d.getDay() === 0;
-    const esFestivo = await esFestivoColombia(fecha);
-    const esDF = esDomingo || esFestivo;
+    // 2) Dominical / festivo (Opción 1: sin DB)
+    const esDF = esDominicalOFestivo(fecha);
 
-    // Cálculo
+    // 3) Cálculo
     const calc = calcularDiaBasico(
         empleado.salarioBaseMensual,
         nominaCfg,
@@ -38,9 +97,11 @@ export async function crearJornadaCalculada(opts: {
         { fecha, horaEntrada: turno.horaEntrada, horaSalida: turno.horaSalida, esDominicalFestivo: esDF }
     );
 
-    // Armar documento listo para auditoría
-    const docData = {
+    // 4) Documento final (trazable)
+    const docData: Omit<JornadaDoc, "id"> = {
         userId: empleado.id,
+        empresa: empleado.empresa,
+
         fecha,
         turnoId,
         horaEntrada: turno.horaEntrada,
@@ -52,7 +113,7 @@ export async function crearJornadaCalculada(opts: {
         horasLaboralesMesAplicadas: nominaCfg.horasLaboralesMes,
         tarifaHoraAplicada: calc.tarifaHoraAplicada,
         rulesAplicadas: rules,
-        recargosAplicados: recargosCfg,
+        recargosAplicados: recargosCfg as unknown as Record<string, number>,
 
         // horas
         horasNormales: calc.horas.horasNormales,
@@ -77,9 +138,57 @@ export async function crearJornadaCalculada(opts: {
         valorTotalDia: calc.valores.valorTotalDia,
 
         creadoEn: serverTimestamp(),
-        estado: "calculado" as const,
+        estado: "calculado",
     };
 
-    const ref = await addDoc(collection(db, "jornadas"), docData);
+    // 5) Guardar en subcolección del usuario
+    const ref = await addDoc(
+        collection(db, "usuarios", empleado.id, "jornadas"),
+        docData
+    );
     return ref.id;
+}
+
+/** Jornadas de un usuario por rango de fechas (subcolección del usuario) */
+export async function listarJornadasPorUsuarioRango(opts: {
+    userId: string;
+    desdeISO: string;  // "YYYY-MM-DD"
+    hastaISO: string;  // "YYYY-MM-DD"
+}): Promise<JornadaDoc[]> {
+    const { userId, desdeISO, hastaISO } = opts;
+
+    const q = query(
+        collection(db, "usuarios", userId, "jornadas"),
+        where("fecha", ">=", desdeISO),
+        where("fecha", "<=", hastaISO),
+        orderBy("fecha", "asc")
+    );
+
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...(d.data() as JornadaDoc) }));
+}
+
+/** Jornadas globales por empresa+rango (usa collectionGroup) */
+export async function listarJornadasPorEmpresaRango(opts: {
+    empresa: Empleado["empresa"];
+    desdeISO: string;
+    hastaISO: string;
+}): Promise<JornadaDoc[]> {
+    const { empresa, desdeISO, hastaISO } = opts;
+
+    const q = query(
+        collectionGroup(db, "jornadas"),
+        where("empresa", "==", empresa),
+        where("fecha", ">=", desdeISO),
+        where("fecha", "<=", hastaISO),
+        orderBy("fecha", "asc")
+    );
+
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...(d.data() as JornadaDoc) }));
+}
+
+/** Eliminar una jornada específica del usuario */
+export async function eliminarJornada(userId: string, jornadaId: string) {
+    await deleteDoc(doc(db, "usuarios", userId, "jornadas", jornadaId));
 }
