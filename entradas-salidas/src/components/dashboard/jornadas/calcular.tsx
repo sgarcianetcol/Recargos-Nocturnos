@@ -143,7 +143,7 @@ export default function CalcularJornadaPage() {
 {/* Turno */}
 <div className="space-y-2 flex flex-col items-center">
   <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-    <FaClock className="text-gray-500" /> Turno
+    <FaClock className="text-gray-500" /> Turnos
   </label>
   <Select onValueChange={setTurnoId}>
     <SelectTrigger className="w-full max-w-sm rounded-xl">
