@@ -1,7 +1,7 @@
 import { JornadaRules, NominaConfig, RecargosConfig } from "./config.model";
 
 export const DEFAULT_NOMINA: NominaConfig = {
-    horasLaboralesMes: 240,
+    horasLaboralesMes: 184,
 };
 
 export const DEFAULT_RECARGOS: RecargosConfig = {
@@ -18,5 +18,4 @@ export const DEFAULT_RULES: JornadaRules = {
     nightStartsAt: "21:00",
     nightEndsAt: "06:00",
     baseDailyHours: 8,
-    // roundToMinutes: 15,
 };
