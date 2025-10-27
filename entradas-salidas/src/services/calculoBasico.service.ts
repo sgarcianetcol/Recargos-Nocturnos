@@ -69,40 +69,41 @@ export function calcularDiaBasico(
 
     const h = (m: number) => +(m / 60).toFixed(2);
     const horas = {
-        totalHoras: h(totalMin),
-        horasNormales: h(baseMin),
-        recargoNocturnoOrdinario: turno.esDominicalFestivo ? 0 : h(normalesNoctMin),
-        recargoFestivoDiurno: turno.esDominicalFestivo ? h(normalesDiurMin) : 0,
-        recargoFestivoNocturno: turno.esDominicalFestivo ? h(normalesNoctMin) : 0,
-        extrasDiurnas: turno.esDominicalFestivo ? 0 : h(extrasDiurMin),
-        extrasNocturnas: turno.esDominicalFestivo ? 0 : h(extrasNoctMin),
-        extrasDiurnasDominical: turno.esDominicalFestivo ? h(extrasDiurMin) : 0,
-        extrasNocturnasDominical: turno.esDominicalFestivo ? h(extrasNoctMin) : 0,
+        "Total Horas": h(totalMin),
+  "Horas Normales": h(baseMin),
+  "Recargo Nocturno Ordinario": turno.esDominicalFestivo ? 0 : h(normalesNoctMin),
+  "Recargo Festivo Diurno": turno.esDominicalFestivo ? h(normalesDiurMin) : 0,
+  "Recargo Festivo Nocturno": turno.esDominicalFestivo ? h(normalesNoctMin) : 0,
+  "Extras Diurnas": turno.esDominicalFestivo ? 0 : h(extrasDiurMin),
+  "Extras Nocturnas": turno.esDominicalFestivo ? 0 : h(extrasNoctMin),
+  "Extras Diurnas Dominical": turno.esDominicalFestivo ? h(extrasDiurMin) : 0,
+  "Extras Nocturnas Dominical": turno.esDominicalFestivo ? h(extrasNoctMin) : 0,
     };
 
     // 4) valores $
     const tarifa = salarioBaseMensual / cfgNomina.horasLaboralesMes;
     const valores = {
-        valorHorasNormales: horas.horasNormales * tarifa,
-        valorRecargoNocturnoOrdinario: horas.recargoNocturnoOrdinario * tarifa * recargos.recargo_nocturno_ordinario,
-        valorRecargoFestivoDiurno: horas.recargoFestivoDiurno * tarifa * recargos.recargo_festivo_diurno,
-        valorRecargoFestivoNocturno: horas.recargoFestivoNocturno * tarifa * recargos.recargo_festivo_nocturno,
-        valorExtrasDiurnas: horas.extrasDiurnas * tarifa * (1 + recargos.extra_diurna),
-        valorExtrasNocturnas: horas.extrasNocturnas * tarifa * (1 + recargos.extra_nocturna),
-        valorExtrasDiurnasDominical: horas.extrasDiurnasDominical * tarifa * (1 + recargos.extra_diurna_dominical),
-        valorExtrasNocturnasDominical: horas.extrasNocturnasDominical * tarifa * (1 + recargos.extra_nocturna_dominical),
-        valorTotalDia: 0,
+        "Valor Horas Normales": horas["Horas Normales"] * tarifa,
+  "Valor Recargo Nocturno Ordinario": horas["Recargo Nocturno Ordinario"] * tarifa * recargos.recargo_nocturno_ordinario,
+  "Valor Recargo Festivo Diurno": horas["Recargo Festivo Diurno"] * tarifa * recargos.recargo_festivo_diurno,
+  "Valor Recargo Festivo Nocturno": horas["Recargo Festivo Nocturno"] * tarifa * recargos.recargo_festivo_nocturno,
+  "Valor Extras Diurnas": horas["Extras Diurnas"] * tarifa * (1 + recargos.extra_diurna),
+  "Valor Extras Nocturnas": horas["Extras Nocturnas"] * tarifa * (1 + recargos.extra_nocturna),
+  "Valor Extras Diurnas Dominical": horas["Extras Diurnas Dominical"] * tarifa * (1 + recargos.extra_diurna_dominical),
+  "Valor Extras Nocturnas Dominical": horas["Extras Nocturnas Dominical"] * tarifa * (1 + recargos.extra_nocturna_dominical),
+  "Valor Total Día": 0,
     } as Record<string, number>;
 
-    valores.valorTotalDia =
-        valores.valorHorasNormales +
-        valores.valorRecargoNocturnoOrdinario +
-        valores.valorRecargoFestivoDiurno +
-        valores.valorRecargoFestivoNocturno +
-        valores.valorExtrasDiurnas +
-        valores.valorExtrasNocturnas +
-        valores.valorExtrasDiurnasDominical +
-        valores.valorExtrasNocturnasDominical;
+    valores["Valor Total Día"] =
+    valores["Valor Horas Normales"] +
+    valores["Valor Recargo Nocturno Ordinario"] +
+    valores["Valor Recargo Festivo Diurno"] +
+    valores["Valor Recargo Festivo Nocturno"] +
+    valores["Valor Extras Diurnas"] +
+    valores["Valor Extras Nocturnas"] +
+    valores["Valor Extras Diurnas Dominical"] +
+    valores["Valor Extras Nocturnas Dominical"];
+
 
     // redondeo 2 decimales
     Object.keys(valores).forEach(k => { valores[k] = +valores[k].toFixed(2); });

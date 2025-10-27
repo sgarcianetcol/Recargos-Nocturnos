@@ -1,4 +1,6 @@
 import * as React from "react";
+import * as XLSX from "xlsx";
+import { saveAs } from "file-saver";
 import { Empleado } from "@/models/usuarios.model";
 import { TurnoBase, RecargosConfig, JornadaRules } from "@/models/config.model";
 import { EmpleadoService } from "@/services/usuariosService";
@@ -12,6 +14,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { CalendarDays } from "lucide-react";
 
 export default function CalcularJornadaPage() {
   const [empleados, setEmpleados] = React.useState<Empleado[]>([]);
@@ -32,6 +35,59 @@ export default function CalcularJornadaPage() {
     horas: any;
     valores: any;
   }>(null);
+
+
+const exportarExcel = () => {
+  if (!preview) return;
+
+  const datos = [
+    ["Empleado", preview.empleado.nombre],
+    ["Fecha", fecha?.toLocaleDateString("es-CO")],
+    ["Turno", `${preview.turno.id} (${preview.turno.horaEntrada}–${preview.turno.horaSalida})`],
+    ["Tarifa hora", preview.tarifa.toLocaleString("es-CO")],
+    [],
+    ["--- HORAS ---"],
+    ...Object.entries(preview.horas).map(([k, v]) => [k, v]),
+    [],
+    ["--- VALORES ($) ---"],
+    ...Object.entries(preview.valores).map(([k, v]) => [k, v]),
+  ];
+
+  const ws = XLSX.utils.aoa_to_sheet(datos);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Jornada");
+  const excelBuffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+  const blob = new Blob([excelBuffer], { type: "application/octet-stream" });
+  saveAs(blob, `Jornada_${preview.empleado.nombre}_${fecha?.toLocaleDateString("es-CO")}.xlsx`);
+};
+
+
+
+  // ✅ Cargar última búsqueda al montar el componente
+React.useEffect(() => {
+  const savedData = localStorage.getItem("ultimaBusqueda");
+  if (savedData) {
+    const { userId, turnoId, fecha, preview } = JSON.parse(savedData);
+    if (userId) setUserId(userId);
+    if (turnoId) setTurnoId(turnoId);
+    if (fecha) setFecha(new Date(fecha));
+    if (preview) setPreview(preview);
+  }
+}, []);
+
+// ✅ Guardar cada vez que cambien los datos
+React.useEffect(() => {
+  if (userId || turnoId || fecha || preview) {
+    const data = {
+      userId,
+      turnoId,
+      fecha: fecha ? fecha.toISOString() : null,
+      preview,
+    };
+    localStorage.setItem("ultimaBusqueda", JSON.stringify(data));
+  }
+}, [userId, turnoId, fecha, preview]);
+
 
   React.useEffect(() => {
     (async () => {
@@ -96,12 +152,12 @@ export default function CalcularJornadaPage() {
       {/* Sección de filtros */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
         
-        {/* Empleado */}
+       {/* Empleado */}
 <div className="space-y-2 flex flex-col items-center">
   <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
     <FaUser className="text-gray-500" /> Empleado
   </label>
-  <Select onValueChange={setUserId}>
+  <Select value={userId} onValueChange={setUserId}>
     <SelectTrigger className="w-full max-w-sm rounded-xl">
       <SelectValue placeholder="Seleccione empleado…" />
     </SelectTrigger>
@@ -118,7 +174,8 @@ export default function CalcularJornadaPage() {
 {/* Fecha */}
 <div className="space-y-2 flex flex-col items-center">
   <label className="text-sm font-semibold text-gray-700 flex justify-center items-center gap-2">
-    📅 Fecha
+    <CalendarDays className="w-4 h-4 text-gray-700" />
+    Fecha
   </label>
   <Popover>
     <PopoverTrigger asChild>
@@ -145,7 +202,7 @@ export default function CalcularJornadaPage() {
   <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
     <FaClock className="text-gray-500" /> Turnos
   </label>
-  <Select onValueChange={setTurnoId}>
+  <Select value={turnoId} onValueChange={setTurnoId}>
     <SelectTrigger className="w-full max-w-sm rounded-xl">
       <SelectValue placeholder="Seleccione turno…" />
     </SelectTrigger>
@@ -159,6 +216,7 @@ export default function CalcularJornadaPage() {
   </Select>
 </div>
 </div>
+
 
       {/* Vista previa */}
       {!preview && (
@@ -185,7 +243,7 @@ export default function CalcularJornadaPage() {
           <section className="p-4 rounded-2xl shadow-lg bg-gradient-to-tr from-indigo-50 to-indigo-100 flex flex-col justify-center items-center">
             <h2 className="text-lg font-semibold mb-2 text-indigo-700">Total Día $</h2>
             <div className="text-3xl font-bold text-indigo-800">
-              ${preview.valores.valorTotalDia.toLocaleString("es-CO")}
+               ${preview?.valores?.["Valor Total Día"]?.toLocaleString("es-CO") ?? "0"}
             </div>
             <p className="text-xs mt-1 text-indigo-600 text-center">Suma de normales, recargos y extras.</p>
           </section>
@@ -216,19 +274,28 @@ export default function CalcularJornadaPage() {
         </div>
       )}
 
-      {/* Botón guardar */}
-      <div className="flex gap-3 mt-4">
-        <Button
-          onClick={guardar}
-          disabled={!preview}
-          className="bg-indigo-700 hover:bg-indigo-800 text-white font-semibold rounded-xl"
-        >
-          Guardar jornada
-        </Button>
-        <span className="text-xs text-gray-500 self-center">
-          (Al guardar, se persiste el desglose y el total en /jornadas)
-        </span>
-      </div>
+      {/* Botones de acción */}
+<div className="flex flex-wrap gap-3 mt-4">
+  <Button
+    onClick={guardar}
+    disabled={!preview}
+    className="bg-indigo-700 hover:bg-indigo-800 text-white font-semibold rounded-xl"
+  >
+    Guardar jornada
+  </Button>
+
+  <Button
+    onClick={exportarExcel}
+    disabled={!preview}
+    className="bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl"
+  >
+    Exportar Excel
+  </Button>
+  <span className="text-xs text-gray-500 self-center">
+    (Puedes guardar o exportar la jornada)
+  </span>
+</div>
+
     </div>
   );
 }
