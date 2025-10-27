@@ -97,49 +97,50 @@ export async function crearJornadaCalculada(opts: {
         { fecha, horaEntrada: turno.horaEntrada, horaSalida: turno.horaSalida, esDominicalFestivo: esDF }
     );
 
-    // 4) Documento final (trazable)
-    const docData: Omit<JornadaDoc, "id"> = {
-        userId: empleado.id,
-        empresa: empleado.empresa,
+   // 4) Documento final (trazable)
+const docData: Omit<JornadaDoc, "id"> = {
+  userId: empleado.id,
+  empresa: empleado.empresa,
 
-        fecha,
-        turnoId,
-        horaEntrada: turno.horaEntrada,
-        horaSalida: turno.horaSalida,
-        cruzoMedianoche: turno.horaSalida <= turno.horaEntrada,
-        esDominicalFestivo: esDF,
+  fecha,
+  turnoId,
+  horaEntrada: turno.horaEntrada,
+  horaSalida: turno.horaSalida,
+  cruzoMedianoche: turno.horaSalida <= turno.horaEntrada,
+  esDominicalFestivo: esDF,
 
-        salarioBaseAplicado: empleado.salarioBaseMensual,
-        horasLaboralesMesAplicadas: nominaCfg.horasLaboralesMes,
-        tarifaHoraAplicada: calc.tarifaHoraAplicada,
-        rulesAplicadas: rules,
-        recargosAplicados: recargosCfg as unknown as Record<string, number>,
+  salarioBaseAplicado: empleado.salarioBaseMensual ?? 0,
+  horasLaboralesMesAplicadas: nominaCfg.horasLaboralesMes ?? 0,
+  tarifaHoraAplicada: calc.tarifaHoraAplicada ?? 0,
+  rulesAplicadas: rules,
+  recargosAplicados: recargosCfg as unknown as Record<string, number>,
 
-        // horas
-        horasNormales: calc.horas.horasNormales,
-        recargoNocturnoOrdinario: calc.horas.recargoNocturnoOrdinario,
-        recargoFestivoDiurno: calc.horas.recargoFestivoDiurno,
-        recargoFestivoNocturno: calc.horas.recargoFestivoNocturno,
-        extrasDiurnas: calc.horas.extrasDiurnas,
-        extrasNocturnas: calc.horas.extrasNocturnas,
-        extrasDiurnasDominical: calc.horas.extrasDiurnasDominical,
-        extrasNocturnasDominical: calc.horas.extrasNocturnasDominical,
-        totalHoras: calc.horas.totalHoras,
+  // horas (con valores seguros)
+  horasNormales: calc.horas?.horasNormales ?? 0,
+  recargoNocturnoOrdinario: calc.horas?.recargoNocturnoOrdinario ?? 0,
+  recargoFestivoDiurno: calc.horas?.recargoFestivoDiurno ?? 0,
+  recargoFestivoNocturno: calc.horas?.recargoFestivoNocturno ?? 0,
+  extrasDiurnas: calc.horas?.extrasDiurnas ?? 0,
+  extrasNocturnas: calc.horas?.extrasNocturnas ?? 0,
+  extrasDiurnasDominical: calc.horas?.extrasDiurnasDominical ?? 0,
+  extrasNocturnasDominical: calc.horas?.extrasNocturnasDominical ?? 0,
+  totalHoras: calc.horas?.totalHoras ?? 0,
 
-        // valores
-        valorHorasNormales: calc.valores.valorHorasNormales,
-        valorRecargoNocturnoOrdinario: calc.valores.valorRecargoNocturnoOrdinario,
-        valorRecargoFestivoDiurno: calc.valores.valorRecargoFestivoDiurno,
-        valorRecargoFestivoNocturno: calc.valores.valorRecargoFestivoNocturno,
-        valorExtrasDiurnas: calc.valores.valorExtrasDiurnas,
-        valorExtrasNocturnas: calc.valores.valorExtrasNocturnas,
-        valorExtrasDiurnasDominical: calc.valores.valorExtrasDiurnasDominical,
-        valorExtrasNocturnasDominical: calc.valores.valorExtrasNocturnasDominical,
-        valorTotalDia: calc.valores.valorTotalDia,
+  // valores (con valores seguros)
+  valorHorasNormales: calc.valores?.valorHorasNormales ?? 0,
+  valorRecargoNocturnoOrdinario: calc.valores?.valorRecargoNocturnoOrdinario ?? 0,
+  valorRecargoFestivoDiurno: calc.valores?.valorRecargoFestivoDiurno ?? 0,
+  valorRecargoFestivoNocturno: calc.valores?.valorRecargoFestivoNocturno ?? 0,
+  valorExtrasDiurnas: calc.valores?.valorExtrasDiurnas ?? 0,
+  valorExtrasNocturnas: calc.valores?.valorExtrasNocturnas ?? 0,
+  valorExtrasDiurnasDominical: calc.valores?.valorExtrasDiurnasDominical ?? 0,
+  valorExtrasNocturnasDominical: calc.valores?.valorExtrasNocturnasDominical ?? 0,
+  valorTotalDia: calc.valores?.valorTotalDia ?? 0,
 
-        creadoEn: serverTimestamp(),
-        estado: "calculado",
-    };
+  creadoEn: serverTimestamp(),
+  estado: "calculado",
+};
+
 
     // 5) Guardar en subcolección del usuario
     const ref = await addDoc(

@@ -1,5 +1,5 @@
 import * as React from "react";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import { Empleado } from "@/models/usuarios.model";
 import { TurnoBase, RecargosConfig, JornadaRules } from "@/models/config.model";
@@ -37,31 +37,49 @@ export default function CalcularJornadaPage() {
   }>(null);
 
 
-const exportarExcel = () => {
+const exportarExcel = async () => {
   if (!preview) return;
 
-  const datos = [
-    ["Empleado", preview.empleado.nombre],
-    ["Fecha", fecha?.toLocaleDateString("es-CO")],
-    ["Turno", `${preview.turno.id} (${preview.turno.horaEntrada}–${preview.turno.horaSalida})`],
-    ["Tarifa hora", preview.tarifa.toLocaleString("es-CO")],
-    [],
-    ["--- HORAS ---"],
-    ...Object.entries(preview.horas).map(([k, v]) => [k, v]),
-    [],
-    ["--- VALORES ($) ---"],
-    ...Object.entries(preview.valores).map(([k, v]) => [k, v]),
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Jornada");
+
+  // 🟢 Títulos en la primera fila
+  const headers = [
+    "Empleado",
+    "Fecha",
+    "Turno",
+    "Tarifa hora",
+    ...Object.keys(preview.horas),
+    ...Object.keys(preview.valores)
   ];
 
-  const ws = XLSX.utils.aoa_to_sheet(datos);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Jornada");
-  const excelBuffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-  const blob = new Blob([excelBuffer], { type: "application/octet-stream" });
+  sheet.addRow(headers);
+
+  // 🟢 Datos en la segunda fila
+  const data = [
+    preview.empleado.nombre,
+    fecha?.toLocaleDateString("es-CO"),
+    `${preview.turno.id} (${preview.turno.horaEntrada}–${preview.turno.horaSalida})`,
+    preview.tarifa.toLocaleString("es-CO"),
+    ...Object.values(preview.horas),
+    ...Object.values(preview.valores)
+  ];
+
+  sheet.addRow(data);
+
+  // 🎨 Formato de títulos
+  headers.forEach((_, i) => {
+    const cell = sheet.getCell(1, i + 1);
+    cell.font = { bold: true };
+    cell.alignment = { horizontal: "center", vertical: "middle" };
+    sheet.getColumn(i + 1).width = 18; // ajusta el ancho de columnas
+  });
+
+  // 📦 Exportar
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
   saveAs(blob, `Jornada_${preview.empleado.nombre}_${fecha?.toLocaleDateString("es-CO")}.xlsx`);
 };
-
-
 
   // ✅ Cargar última búsqueda al montar el componente
 React.useEffect(() => {
@@ -125,6 +143,7 @@ React.useEffect(() => {
         rules,
         { fecha: fechaStr, horaEntrada: trn.horaEntrada, horaSalida: trn.horaSalida, esDominicalFestivo: esDF }
       );
+      console.log("Resultado del cálculo:", calc);
 
       setPreview({
         empleado: emp,
