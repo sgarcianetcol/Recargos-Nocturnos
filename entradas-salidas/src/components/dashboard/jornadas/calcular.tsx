@@ -37,74 +37,74 @@ export default function CalcularJornadaPage() {
   }>(null);
 
 
-const exportarExcel = async () => {
-  if (!preview) return;
+  const exportarExcel = async () => {
+    if (!preview) return;
 
-  const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet("Jornada");
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Jornada");
 
-  // 🟢 Títulos en la primera fila
-  const headers = [
-    "Empleado",
-    "Fecha",
-    "Turno",
-    "Tarifa hora",
-    ...Object.keys(preview.horas),
-    ...Object.keys(preview.valores)
-  ];
+    // 🟢 Títulos en la primera fila
+    const headers = [
+      "Empleado",
+      "Fecha",
+      "Turno",
+      "Tarifa hora",
+      ...Object.keys(preview.horas),
+      ...Object.keys(preview.valores)
+    ];
 
-  sheet.addRow(headers);
+    sheet.addRow(headers);
 
-  // 🟢 Datos en la segunda fila
-  const data = [
-    preview.empleado.nombre,
-    fecha?.toLocaleDateString("es-CO"),
-    `${preview.turno.id} (${preview.turno.horaEntrada}–${preview.turno.horaSalida})`,
-    preview.tarifa.toLocaleString("es-CO"),
-    ...Object.values(preview.horas),
-    ...Object.values(preview.valores)
-  ];
+    // 🟢 Datos en la segunda fila
+    const data = [
+      preview.empleado.nombre,
+      fecha?.toLocaleDateString("es-CO"),
+      `${preview.turno.id} (${preview.turno.horaEntrada}–${preview.turno.horaSalida})`,
+      preview.tarifa.toLocaleString("es-CO"),
+      ...Object.values(preview.horas),
+      ...Object.values(preview.valores)
+    ];
 
-  sheet.addRow(data);
+    sheet.addRow(data);
 
-  // 🎨 Formato de títulos
-  headers.forEach((_, i) => {
-    const cell = sheet.getCell(1, i + 1);
-    cell.font = { bold: true };
-    cell.alignment = { horizontal: "center", vertical: "middle" };
-    sheet.getColumn(i + 1).width = 18; // ajusta el ancho de columnas
-  });
+    // 🎨 Formato de títulos
+    headers.forEach((_, i) => {
+      const cell = sheet.getCell(1, i + 1);
+      cell.font = { bold: true };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      sheet.getColumn(i + 1).width = 18; // ajusta el ancho de columnas
+    });
 
-  // 📦 Exportar
-  const buffer = await workbook.xlsx.writeBuffer();
-  const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-  saveAs(blob, `Jornada_${preview.empleado.nombre}_${fecha?.toLocaleDateString("es-CO")}.xlsx`);
-};
+    // 📦 Exportar
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    saveAs(blob, `Jornada_${preview.empleado.nombre}_${fecha?.toLocaleDateString("es-CO")}.xlsx`);
+  };
 
   // ✅ Cargar última búsqueda al montar el componente
-React.useEffect(() => {
-  const savedData = localStorage.getItem("ultimaBusqueda");
-  if (savedData) {
-    const { userId, turnoId, fecha, preview } = JSON.parse(savedData);
-    if (userId) setUserId(userId);
-    if (turnoId) setTurnoId(turnoId);
-    if (fecha) setFecha(new Date(fecha));
-    if (preview) setPreview(preview);
-  }
-}, []);
+  React.useEffect(() => {
+    const savedData = localStorage.getItem("ultimaBusqueda");
+    if (savedData) {
+      const { userId, turnoId, fecha, preview } = JSON.parse(savedData);
+      if (userId) setUserId(userId);
+      if (turnoId) setTurnoId(turnoId);
+      if (fecha) setFecha(new Date(fecha));
+      if (preview) setPreview(preview);
+    }
+  }, []);
 
-// ✅ Guardar cada vez que cambien los datos
-React.useEffect(() => {
-  if (userId || turnoId || fecha || preview) {
-    const data = {
-      userId,
-      turnoId,
-      fecha: fecha ? fecha.toISOString() : null,
-      preview,
-    };
-    localStorage.setItem("ultimaBusqueda", JSON.stringify(data));
-  }
-}, [userId, turnoId, fecha, preview]);
+  // ✅ Guardar cada vez que cambien los datos
+  React.useEffect(() => {
+    if (userId || turnoId || fecha || preview) {
+      const data = {
+        userId,
+        turnoId,
+        fecha: fecha ? fecha.toISOString() : null,
+        preview,
+      };
+      localStorage.setItem("ultimaBusqueda", JSON.stringify(data));
+    }
+  }, [userId, turnoId, fecha, preview]);
 
 
   React.useEffect(() => {
@@ -170,71 +170,71 @@ React.useEffect(() => {
 
       {/* Sección de filtros */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-        
-       {/* Empleado */}
-<div className="space-y-2 flex flex-col items-center">
-  <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-    <FaUser className="text-gray-500" /> Empleado
-  </label>
-  <Select value={userId} onValueChange={setUserId}>
-    <SelectTrigger className="w-full max-w-sm rounded-xl">
-      <SelectValue placeholder="Seleccione empleado…" />
-    </SelectTrigger>
-    <SelectContent className="w-full max-w-sm">
-      {empleados.map((e) => (
-        <SelectItem key={e.id} value={e.id}>
-          {e.nombre} — {e.empresa}
-        </SelectItem>
-      ))}
-    </SelectContent>
-  </Select>
-</div>
 
-{/* Fecha */}
-<div className="space-y-2 flex flex-col items-center">
-  <label className="text-sm font-semibold text-gray-700 flex justify-center items-center gap-2">
-    <CalendarDays className="w-4 h-4 text-gray-700" />
-    Fecha
-  </label>
-  <Popover>
-    <PopoverTrigger asChild>
-      <Button
-        variant="outline"
-        className="w-full max-w-sm justify-center rounded-xl border-gray-300"
-      >
-        {fecha ? fecha.toLocaleDateString("es-CO") : "Seleccione fecha…"}
-      </Button>
-    </PopoverTrigger>
-    <PopoverContent align="center" className="p-2 rounded-xl">
-      <Calendar
-        mode="single"
-        selected={fecha}
-        onSelect={setFecha}
-        className="rounded-xl"
-      />
-    </PopoverContent>
-  </Popover>
-</div>
+        {/* Empleado */}
+        <div className="space-y-2 flex flex-col items-center">
+          <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+            <FaUser className="text-gray-500" /> Empleado
+          </label>
+          <Select value={userId} onValueChange={setUserId}>
+            <SelectTrigger className="w-full max-w-sm rounded-xl">
+              <SelectValue placeholder="Seleccione empleado…" />
+            </SelectTrigger>
+            <SelectContent className="w-full max-w-sm">
+              {empleados.map((e) => (
+                <SelectItem key={e.id} value={e.id}>
+                  {e.nombre} — {e.empresa}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-{/* Turno */}
-<div className="space-y-2 flex flex-col items-center">
-  <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-    <FaClock className="text-gray-500" /> Turnos
-  </label>
-  <Select value={turnoId} onValueChange={setTurnoId}>
-    <SelectTrigger className="w-full max-w-sm rounded-xl">
-      <SelectValue placeholder="Seleccione turno…" />
-    </SelectTrigger>
-    <SelectContent className="w-full max-w-sm">
-      {turnos.map((t) => (
-        <SelectItem key={t.id} value={t.id}>
-          {t.id} — {t.horaEntrada} a {t.horaSalida}
-        </SelectItem>
-      ))}
-    </SelectContent>
-  </Select>
-</div>
-</div>
+        {/* Fecha */}
+        <div className="space-y-2 flex flex-col items-center">
+          <label className="text-sm font-semibold text-gray-700 flex justify-center items-center gap-2">
+            <CalendarDays className="w-4 h-4 text-gray-700" />
+            Fecha
+          </label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className="w-full max-w-sm justify-center rounded-xl border-gray-300"
+              >
+                {fecha ? fecha.toLocaleDateString("es-CO") : "Seleccione fecha…"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="center" className="p-2 rounded-xl">
+              <Calendar
+                mode="single"
+                selected={fecha}
+                onSelect={setFecha}
+                className="rounded-xl"
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
+
+        {/* Turno */}
+        <div className="space-y-2 flex flex-col items-center">
+          <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+            <FaClock className="text-gray-500" /> Turnos
+          </label>
+          <Select value={turnoId} onValueChange={setTurnoId}>
+            <SelectTrigger className="w-full max-w-sm rounded-xl">
+              <SelectValue placeholder="Seleccione turno…" />
+            </SelectTrigger>
+            <SelectContent className="w-full max-w-sm">
+              {turnos.map((t) => (
+                <SelectItem key={t.id} value={t.id}>
+                  {t.id} — {t.horaEntrada} a {t.horaSalida}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
 
 
       {/* Vista previa */}
@@ -247,7 +247,7 @@ React.useEffect(() => {
       {preview && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Parámetros */}
-          <section className="p-4 rounded-2xl shadow-lg bg-gradient-to-tr from-gray-50 to-gray-100">
+          <section className="p-4 rounded-2xl shadow-lg  from-gray-50 to-gray-100">
             <h2 className="font-semibold mb-3 text-gray-800">Parámetros aplicados</h2>
             <ul className="text-sm space-y-1 text-gray-700">
               <li><b>Empleado:</b> {preview.empleado.nombre}</li>
@@ -259,10 +259,10 @@ React.useEffect(() => {
           </section>
 
           {/* Total día */}
-          <section className="p-4 rounded-2xl shadow-lg bg-gradient-to-tr from-indigo-50 to-indigo-100 flex flex-col justify-center items-center">
+          <section className="p-4 rounded-2xl shadow-lg  from-indigo-50 to-indigo-100 flex flex-col justify-center items-center">
             <h2 className="text-lg font-semibold mb-2 text-indigo-700">Total Día $</h2>
             <div className="text-3xl font-bold text-indigo-800">
-               ${preview?.valores?.["Valor Total Día"]?.toLocaleString("es-CO") ?? "0"}
+              ${preview?.valores?.["Valor Total Día"]?.toLocaleString("es-CO") ?? "0"}
             </div>
             <p className="text-xs mt-1 text-indigo-600 text-center">Suma de normales, recargos y extras.</p>
           </section>
@@ -294,26 +294,26 @@ React.useEffect(() => {
       )}
 
       {/* Botones de acción */}
-<div className="flex flex-wrap gap-3 mt-4">
-  <Button
-    onClick={guardar}
-    disabled={!preview}
-    className="bg-indigo-700 hover:bg-indigo-800 text-white font-semibold rounded-xl"
-  >
-    Guardar jornada
-  </Button>
+      <div className="flex flex-wrap gap-3 mt-4">
+        <Button
+          onClick={guardar}
+          disabled={!preview}
+          className="bg-indigo-700 hover:bg-indigo-800 text-white font-semibold rounded-xl"
+        >
+          Guardar jornada
+        </Button>
 
-  <Button
-    onClick={exportarExcel}
-    disabled={!preview}
-    className="bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl"
-  >
-    Exportar Excel
-  </Button>
-  <span className="text-xs text-gray-500 self-center">
-    (Puedes guardar o exportar la jornada)
-  </span>
-</div>
+        <Button
+          onClick={exportarExcel}
+          disabled={!preview}
+          className="bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl"
+        >
+          Exportar Excel
+        </Button>
+        <span className="text-xs text-gray-500 self-center">
+          (Puedes guardar o exportar la jornada)
+        </span>
+      </div>
 
     </div>
   );

@@ -1,4 +1,4 @@
-import CalculoMasivo from "@/components/dashboard/CalculoMasivo";
+import NominaResumen from "@/components/dashboard/nomina/nomina";
 import DashboardLayout from "@/layouts/DashboardLayout";
 
 
@@ -6,7 +6,7 @@ export default function EmpleadosPage() {
     return (
         <main className="p-6">
             <DashboardLayout>
-                <CalculoMasivo />
+                <NominaResumen />
             </DashboardLayout>
 
         </main>
