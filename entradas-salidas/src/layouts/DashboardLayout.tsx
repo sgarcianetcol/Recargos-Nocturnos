@@ -16,9 +16,11 @@ const menuItems = [
     { title: "Resumen", icon: BarChart3, href: "/dashboard", isActive: false },
     { title: "Usuarios", icon: Users, href: "/usuarios", isActive: false },
     { title: "Calcular", icon: Calculator, href: "/calculadora", isActive: false },
+    { title: "Cálculo masivo", icon: Calculator, href: "/calculoMasivo", isActive: false },
     { title: "Calendario", icon: Calendar, href: "/calendario", isActive: false },
     { title: "Configuración", icon: Bolt, href: "/configuracion", isActive: false },
 ];
+
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
     const pathname = typeof window !== "undefined" ? window.location.pathname : "";
