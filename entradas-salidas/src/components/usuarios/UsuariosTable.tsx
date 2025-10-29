@@ -29,6 +29,18 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { getAuth } from "firebase/auth";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { CheckCircle2Icon, AlertCircleIcon } from "lucide-react";
 
 export default function UsuariosTable() {
   const [empleados, setEmpleados] = React.useState<Empleado[]>([]);
@@ -43,28 +55,42 @@ export default function UsuariosTable() {
   const [filtroRol, setFiltroRol] = React.useState<string>("todos");
   const [filtroEmpresa, setFiltroEmpresa] = React.useState<string>("todas");
 
-  // 🔁 Cargar empleados al iniciar
+  // AlertDialog de estado
+  const [empleadoAEliminar, setEmpleadoAEliminar] = React.useState<Empleado | null>(null);
+  const [alertDialogData, setAlertDialogData] = React.useState<{
+    tipo: "success" | "warning";
+    titulo: string;
+    descripcion: React.ReactNode;
+  } | null>(null);
+
+  // Cargar empleados al iniciar
   React.useEffect(() => {
     EmpleadoService.listar().then(setEmpleados);
   }, []);
 
-  // ✅ Crear empleado manualmente
+  // Crear empleado
   const guardar = async () => {
     if (!nuevo.nombre || !nuevo.correo) {
-      alert("Por favor completa todos los campos obligatorios.");
+      setAlertDialogData({
+        tipo: "warning",
+        titulo: "Campos incompletos",
+        descripcion: "Por favor completa todos los campos obligatorios.",
+      });
       return;
     }
     if (
       typeof nuevo.salarioBaseMensual !== "number" ||
       nuevo.salarioBaseMensual <= 0
     ) {
-      alert("Ingresa un salario base mensual válido.");
+      setAlertDialogData({
+        tipo: "warning",
+        titulo: "Salario inválido",
+        descripcion: "Ingresa un salario base mensual válido.",
+      });
       return;
     }
 
     try {
-      const auth = getAuth();
-
       await EmpleadoService.crear({
         nombre: nuevo.nombre!,
         correo: nuevo.correo!,
@@ -75,100 +101,118 @@ export default function UsuariosTable() {
         salarioBaseMensual: Number(nuevo.salarioBaseMensual),
       });
 
-      alert("Empleado creado correctamente ✅");
+      setAlertDialogData({
+        tipo: "success",
+        titulo: "Empleado creado ✅",
+        descripcion: `El empleado ${nuevo.nombre} ha sido creado correctamente.`,
+      });
+
       setOpen(false);
       setNuevo({ rol: "empleado", empresa: "NETCOL" });
       setEmpleados(await EmpleadoService.listar());
     } catch (error: any) {
-      alert("Error al crear empleado: " + error.message);
+      setAlertDialogData({
+        tipo: "warning",
+        titulo: "Error al crear empleado",
+        descripcion: error.message || "Ocurrió un error desconocido.",
+      });
     }
   };
 
-  // ✅ Guardar edición
+  // Guardar edición
   const guardarEdicion = async () => {
     if (!editando) return;
     await EmpleadoService.actualizar(editando.id!, editando);
     setOpenEdit(false);
     const updated = await EmpleadoService.listar();
     setEmpleados(updated);
+    setAlertDialogData({
+      tipo: "success",
+      titulo: "Empleado actualizado ✅",
+      descripcion: `Los cambios del empleado ${editando.nombre} se han guardado correctamente.`,
+    });
   };
 
-  // ✅ Eliminar empleado
-  const eliminar = async (id: string) => {
-    if (confirm("¿Eliminar este empleado?")) {
-      await EmpleadoService.eliminar(id);
-      setEmpleados(await EmpleadoService.listar());
-    }
-  };
-  // 🟢 Importar Excel y guardar en Firebase (con verificación de duplicados)
-const handleImportExcel = async (
-  event: React.ChangeEvent<HTMLInputElement>
-) => {
-  const file = event.target.files?.[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = async (e) => {
-    const data = new Uint8Array(e.target?.result as ArrayBuffer);
-    const workbook = XLSX.read(data, { type: "array" });
-    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-    const jsonData = XLSX.utils.sheet_to_json(worksheet);
-
-    let importados = 0;
-    let duplicados: string[] = [];
-
-    // Obtener todos los usuarios existentes una sola vez
-    const usuariosExistentes = await EmpleadoService.listar();
-    const correosExistentes = usuariosExistentes.map(
-      (u: any) => u.correo?.toLowerCase()
-    );
-
-    for (const item of jsonData as any[]) {
-      try {
-        if (!item.Nombre || !item.Correo) continue;
-        const correo = item.Correo.toLowerCase();
-
-        // Verificar duplicado
-        if (correosExistentes.includes(correo)) {
-          duplicados.push(correo);
-          continue;
-        }
-
-        // Crear usuario nuevo
-        await EmpleadoService.crear({
-          nombre: item.Nombre,
-          correo: item.Correo,
-          documento: item.Documento || "",
-          rol: item.Rol || "empleado",
-          empresa: item.Empresa || "NETCOL",
-          activo: true,
-          salarioBaseMensual: Number(item.SalarioBaseMensual || 0),
-        });
-
-        importados++;
-        correosExistentes.push(correo); // evitar duplicar en el mismo archivo
-      } catch (err) {
-        console.error("Error importando empleado:", err);
-      }
-    }
-
-    // Mostrar resumen
-    let mensaje = `✅ Importación completada\n\nEmpleados agregados: ${importados}`;
-    if (duplicados.length > 0) {
-      mensaje += `\n⚠️ Duplicados (${duplicados.length}):\n${duplicados.join(
-        "\n"
-      )}`;
-    }
-
-    alert(mensaje);
-
-    // Actualizar lista
+  // Confirmar eliminación
+  const confirmarEliminar = async () => {
+    if (!empleadoAEliminar) return;
+    await EmpleadoService.eliminar(empleadoAEliminar.id!);
     setEmpleados(await EmpleadoService.listar());
+    setAlertDialogData({
+      tipo: "success",
+      titulo: "Empleado eliminado ✅",
+      descripcion: `El empleado ${empleadoAEliminar.nombre} ha sido eliminado correctamente.`,
+    });
+    setEmpleadoAEliminar(null);
   };
 
-  reader.readAsArrayBuffer(file);
-};
-  // 🟢 Exportar Excel
+  // Importar Excel
+  const handleImportExcel = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const data = new Uint8Array(e.target?.result as ArrayBuffer);
+      const workbook = XLSX.read(data, { type: "array" });
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+      let importados = 0;
+      let duplicados: string[] = [];
+
+      const usuariosExistentes = await EmpleadoService.listar();
+      const correosExistentes = usuariosExistentes.map((u: any) => u.correo?.toLowerCase());
+
+      for (const item of jsonData as any[]) {
+        try {
+          if (!item.Nombre || !item.Correo) continue;
+          const correo = item.Correo.toLowerCase();
+          if (correosExistentes.includes(correo)) {
+            duplicados.push(correo);
+            continue;
+          }
+          await EmpleadoService.crear({
+            nombre: item.Nombre,
+            correo: item.Correo,
+            documento: item.Documento || "",
+            rol: item.Rol || "empleado",
+            empresa: item.Empresa || "NETCOL",
+            activo: true,
+            salarioBaseMensual: Number(item.SalarioBaseMensual || 0),
+          });
+          importados++;
+          correosExistentes.push(correo);
+        } catch (err) {
+          console.error("Error importando empleado:", err);
+        }
+      }
+
+      // AlertDialog con iconos y resumen
+      const descripcion = (
+        <div className="flex flex-col gap-1">
+          <p>Empleados agregados: {importados}</p>
+          {duplicados.length > 0 && (
+            <p>
+              ⚠️ Duplicados ({duplicados.length}):<br />
+              {duplicados.join(", ")}
+            </p>
+          )}
+        </div>
+      );
+
+      setAlertDialogData({
+        tipo: duplicados.length > 0 ? "warning" : "success",
+        titulo: "Importación completada",
+        descripcion,
+      });
+
+      setEmpleados(await EmpleadoService.listar());
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  // Exportar Excel
   const handleExportExcel = () => {
     const data = empleados.map((e) => ({
       Nombre: e.nombre,
@@ -186,7 +230,7 @@ const handleImportExcel = async (
     XLSX.writeFile(workbook, "Empleados.xlsx");
   };
 
-  // 🧠 Filtros
+  // Filtrado
   const filtrados = empleados.filter((e) => {
     const coincideNombre = e.nombre?.toLowerCase().includes(search.toLowerCase());
     const coincideRol = filtroRol === "todos" || e.rol === filtroRol;
@@ -196,14 +240,11 @@ const handleImportExcel = async (
 
   return (
     <div className="p-4 space-y-4">
-      {/* 🟢 Encabezado */}
+      {/* Encabezado */}
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-semibold">Empleados</h2>
-
         <div className="flex gap-2">
           <Button onClick={() => setOpen(true)}>+ Nuevo</Button>
-
-          {/* Importar Excel */}
           <label htmlFor="excel-upload">
             <input
               id="excel-upload"
@@ -214,13 +255,10 @@ const handleImportExcel = async (
             />
             <Button asChild>
               <span className="flex items-center gap-1">
-                <FileSpreadsheet className="w-4 h-4" />
-                Importar
+                <FileSpreadsheet className="w-4 h-4" /> Importar
               </span>
             </Button>
           </label>
-
-          {/* Exportar Excel */}
           <Button onClick={handleExportExcel}>
             <Download className="w-4 h-4 mr-1" />
             Exportar
@@ -228,7 +266,7 @@ const handleImportExcel = async (
         </div>
       </div>
 
-      {/* 🧠 Filtros */}
+      {/* Filtros */}
       <div className="flex flex-wrap gap-3 items-center">
         <Input
           placeholder="Buscar por nombre..."
@@ -236,8 +274,7 @@ const handleImportExcel = async (
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-sm"
         />
-
-        <Select value={filtroRol} onValueChange={(v) => setFiltroRol(v)}>
+        <Select value={filtroRol} onValueChange={setFiltroRol}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Filtrar por rol" />
           </SelectTrigger>
@@ -248,8 +285,7 @@ const handleImportExcel = async (
             <SelectItem value="empleado">Empleado</SelectItem>
           </SelectContent>
         </Select>
-
-        <Select value={filtroEmpresa} onValueChange={(v) => setFiltroEmpresa(v)}>
+        <Select value={filtroEmpresa} onValueChange={setFiltroEmpresa}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Filtrar por empresa" />
           </SelectTrigger>
@@ -262,7 +298,7 @@ const handleImportExcel = async (
         </Select>
       </div>
 
-      {/* 🧾 Tabla */}
+      {/* Tabla */}
       <Table>
         <TableHeader>
           <TableRow>
@@ -296,7 +332,7 @@ const handleImportExcel = async (
                   <Button
                     size="icon"
                     variant="destructive"
-                    onClick={() => eliminar(e.id!)}
+                    onClick={() => setEmpleadoAEliminar(e)}
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>
@@ -307,7 +343,7 @@ const handleImportExcel = async (
         </TableBody>
       </Table>
 
-      {/* 🟢 Modal Nuevo Empleado */}
+      {/* Modal Nuevo */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
@@ -345,9 +381,7 @@ const handleImportExcel = async (
             />
             <Select
               value={nuevo.rol}
-              onValueChange={(v) =>
-                setNuevo({ ...nuevo, rol: v as Empleado["rol"] })
-              }
+              onValueChange={(v) => setNuevo({ ...nuevo, rol: v as Empleado["rol"] })}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Rol" />
@@ -360,9 +394,7 @@ const handleImportExcel = async (
             </Select>
             <Select
               value={nuevo.empresa}
-              onValueChange={(v) =>
-                setNuevo({ ...nuevo, empresa: v as Empleado["empresa"] })
-              }
+              onValueChange={(v) => setNuevo({ ...nuevo, empresa: v as Empleado["empresa"] })}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Empresa" />
@@ -380,7 +412,7 @@ const handleImportExcel = async (
         </DialogContent>
       </Dialog>
 
-      {/* 🟢 Modal Editar Empleado */}
+      {/* Modal Editar */}
       <Dialog open={openEdit} onOpenChange={setOpenEdit}>
         <DialogContent>
           <DialogHeader>
@@ -391,16 +423,12 @@ const handleImportExcel = async (
               <Input
                 placeholder="Nombre"
                 value={editando.nombre}
-                onChange={(e) =>
-                  setEditando({ ...editando, nombre: e.target.value })
-                }
+                onChange={(e) => setEditando({ ...editando, nombre: e.target.value })}
               />
               <Input
                 placeholder="Correo"
                 value={editando.correo}
-                onChange={(e) =>
-                  setEditando({ ...editando, correo: e.target.value })
-                }
+                onChange={(e) => setEditando({ ...editando, correo: e.target.value })}
               />
               <Input
                 type="number"
@@ -417,9 +445,7 @@ const handleImportExcel = async (
               />
               <Select
                 value={editando.rol}
-                onValueChange={(v) =>
-                  setEditando({ ...editando, rol: v as Empleado["rol"] })
-                }
+                onValueChange={(v) => setEditando({ ...editando, rol: v as Empleado["rol"] })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Rol" />
@@ -432,12 +458,7 @@ const handleImportExcel = async (
               </Select>
               <Select
                 value={editando.empresa}
-                onValueChange={(v) =>
-                  setEditando({
-                    ...editando,
-                    empresa: v as Empleado["empresa"],
-                  })
-                }
+                onValueChange={(v) => setEditando({ ...editando, empresa: v as Empleado["empresa"] })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Empresa" />
@@ -455,6 +476,56 @@ const handleImportExcel = async (
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* AlertDialog para eliminar */}
+      <AlertDialog open={!!empleadoAEliminar} onOpenChange={() => setEmpleadoAEliminar(null)}>
+        <AlertDialogTrigger asChild>
+          <span className="hidden" />
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {empleadoAEliminar ? `Eliminar a ${empleadoAEliminar.nombre}?` : ""}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setEmpleadoAEliminar(null)}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={confirmarEliminar}>
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* AlertDialog para notificaciones */}
+      {alertDialogData && (
+        <AlertDialog open={true} onOpenChange={() => setAlertDialogData(null)}>
+          <AlertDialogTrigger asChild>
+            <span className="hidden" />
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                {alertDialogData.tipo === "success" ? (
+                  <CheckCircle2Icon className="w-5 h-5 text-green-500" />
+                ) : (
+                  <AlertCircleIcon className="w-5 h-5 text-yellow-500" />
+                )}
+                {alertDialogData.titulo}
+              </AlertDialogTitle>
+              <AlertDialogDescription>{alertDialogData.descripcion}</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogAction onClick={() => setAlertDialogData(null)}>Cerrar</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </div>
   );
 }
