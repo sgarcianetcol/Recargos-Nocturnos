@@ -1,6 +1,8 @@
 "use client";
 import * as React from "react";
 import * as XLSX from "xlsx";
+import type { Rol } from "@/models/usuarios.model";
+
 import { Edit, Trash2, FileSpreadsheet, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,7 +30,6 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { getAuth } from "firebase/auth";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,6 +44,13 @@ import {
 import { CheckCircle2Icon, AlertCircleIcon } from "lucide-react";
 
 export default function UsuariosTable() {
+  const normalizeRol = (rol: string): Empleado["rol"] => {
+    const lower = rol.toLowerCase().trim();
+    if (lower === "admin") return "admin";
+    if (lower === "líder" || lower === "líder") return "líder";
+    return "empleado";
+  };
+
   const [empleados, setEmpleados] = React.useState<Empleado[]>([]);
   const [open, setOpen] = React.useState(false);
   const [openEdit, setOpenEdit] = React.useState(false);
@@ -147,71 +155,98 @@ export default function UsuariosTable() {
   };
 
   // Importar Excel
-  const handleImportExcel = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+const handleImportExcel = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const data = new Uint8Array(e.target?.result as ArrayBuffer);
-      const workbook = XLSX.read(data, { type: "array" });
-      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    const data = new Uint8Array(e.target?.result as ArrayBuffer);
+    const workbook = XLSX.read(data, { type: "array" });
+    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+    const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
-      let importados = 0;
-      let duplicados: string[] = [];
+    let importados = 0;
+    let duplicados: string[] = [];
 
-      const usuariosExistentes = await EmpleadoService.listar();
-      const correosExistentes = usuariosExistentes.map((u: any) => u.correo?.toLowerCase());
+    const usuariosExistentes = await EmpleadoService.listar();
+    const correosExistentes = usuariosExistentes.map((u: any) => u.correo?.toLowerCase());
 
-      for (const item of jsonData as any[]) {
-        try {
-          if (!item.Nombre || !item.Correo) continue;
-          const correo = item.Correo.toLowerCase();
-          if (correosExistentes.includes(correo)) {
-            duplicados.push(correo);
-            continue;
-          }
-          await EmpleadoService.crear({
-            nombre: item.Nombre,
-            correo: item.Correo,
-            documento: item.Documento || "",
-            rol: item.Rol || "empleado",
-            empresa: item.Empresa || "NETCOL",
-            activo: true,
-            salarioBaseMensual: Number(item.SalarioBaseMensual || 0),
-          });
-          importados++;
-          correosExistentes.push(correo);
-        } catch (err) {
-          console.error("Error importando empleado:", err);
+    // 🔤 Función para normalizar texto (quita tildes, espacios y mayúsculas)
+    const normalizarTexto = (texto: any) =>
+      String(texto || "")
+        .normalize("NFD") // separa acentos
+        .replace(/[\u0300-\u036f]/g, "") // elimina acentos
+        .trim()
+        .toLowerCase();
+
+    for (const item of jsonData as any[]) {
+      try {
+        if (!item.Nombre || !item.Correo) continue;
+        const correo = item.Correo.toLowerCase();
+        if (correosExistentes.includes(correo)) {
+          duplicados.push(correo);
+          continue;
         }
+
+        const rolExcel = normalizarTexto(item.Rol);
+
+        let rolValido: "admin" | "líder" | "empleado";
+        switch (rolExcel) {
+          case "admin":
+            rolValido = "admin";
+            break;
+          case "líder": // sin tilde, pero normalizado arriba
+            rolValido = "líder";
+            break;
+          case "empleado":
+          default:
+            rolValido = "empleado";
+            break;
+        }
+
+        await EmpleadoService.crear({
+          nombre: item.Nombre,
+          correo: item.Correo,
+          documento: item.Documento || "",
+          rol: rolValido,
+          empresa: item.Empresa || "NETCOL",
+          activo: true,
+          salarioBaseMensual: Number(
+            String(item.SalarioBaseMensual || item.Salario || "0").replace(/[^0-9.-]+/g, "")
+          ),
+        });
+        importados++;
+        correosExistentes.push(correo);
+      } catch (err) {
+        console.error("Error importando empleado:", err);
       }
+    }
 
-      // AlertDialog con iconos y resumen
-      const descripcion = (
-        <div className="flex flex-col gap-1">
-          <p>Empleados agregados: {importados}</p>
-          {duplicados.length > 0 && (
-            <p>
-              ⚠️ Duplicados ({duplicados.length}):<br />
-              {duplicados.join(", ")}
-            </p>
-          )}
-        </div>
-      );
 
-      setAlertDialogData({
-        tipo: duplicados.length > 0 ? "warning" : "success",
-        titulo: "Importación completada",
-        descripcion,
-      });
+    // AlertDialog con iconos y resumen
+    const descripcion = (
+      <div className="flex flex-col gap-1">
+        <p>Empleados agregados: {importados}</p>
+        {duplicados.length > 0 && (
+          <p>
+            ⚠️ Duplicados ({duplicados.length}):<br />
+            {duplicados.join(", ")}
+          </p>
+        )}
+      </div>
+    );
 
-      setEmpleados(await EmpleadoService.listar());
-    };
-    reader.readAsArrayBuffer(file);
+    setAlertDialogData({
+      tipo: duplicados.length > 0 ? "warning" : "success",
+      titulo: "Importación completada",
+      descripcion,
+    });
+
+    setEmpleados(await EmpleadoService.listar());
   };
-
+  reader.readAsArrayBuffer(file);
+};
   // Exportar Excel
   const handleExportExcel = () => {
     const data = empleados.map((e) => ({
@@ -281,7 +316,7 @@ export default function UsuariosTable() {
           <SelectContent>
             <SelectItem value="todos">Todos los roles</SelectItem>
             <SelectItem value="admin">Admin</SelectItem>
-            <SelectItem value="lider">Líder</SelectItem>
+            <SelectItem value="líder">Líder</SelectItem>
             <SelectItem value="empleado">Empleado</SelectItem>
           </SelectContent>
         </Select>
@@ -388,7 +423,7 @@ export default function UsuariosTable() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="admin">Admin</SelectItem>
-                <SelectItem value="lider">Líder</SelectItem>
+                <SelectItem value="líder">Líder</SelectItem>
                 <SelectItem value="empleado">Empleado</SelectItem>
               </SelectContent>
             </Select>
@@ -452,7 +487,7 @@ export default function UsuariosTable() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="lider">Líder</SelectItem>
+                  <SelectItem value="líder">Líder</SelectItem>
                   <SelectItem value="empleado">Empleado</SelectItem>
                 </SelectContent>
               </Select>

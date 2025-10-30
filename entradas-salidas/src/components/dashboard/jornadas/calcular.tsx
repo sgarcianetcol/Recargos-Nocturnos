@@ -262,8 +262,9 @@ export default function CalcularJornadaPage() {
           <section className="p-4 rounded-2xl shadow-lg  from-indigo-50 to-indigo-100 flex flex-col justify-center items-center">
             <h2 className="text-lg font-semibold mb-2 text-indigo-700">Total Día $</h2>
             <div className="text-3xl font-bold text-indigo-800">
-              ${preview?.valores?.["Valor Total Día"]?.toLocaleString("es-CO") ?? "0"}
-            </div>
+  ${preview?.valores?.valorTotalDia?.toLocaleString("es-CO") ?? "0"}
+</div>
+
             <p className="text-xs mt-1 text-indigo-600 text-center">Suma de normales, recargos y extras.</p>
           </section>
 

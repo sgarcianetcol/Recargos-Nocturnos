@@ -1,5 +1,5 @@
 // src/auth/permissions.ts
-export type Rol = "admin" | "lider" | "empleado";
+export type Rol = "admin" | "líder" | "empleado";
 
 export const PERMS = {
     VER_RESUMEN: "ver_resumen",
@@ -19,7 +19,7 @@ export const ROLE_PERMS: Record<Rol, string[]> = {
         PERMS.VER_CALCULAR, PERMS.CREAR_FICHAJE, PERMS.CERRAR_FICHAJE,
         PERMS.VER_NOMINA, PERMS.EXPORTAR_NOMINA, PERMS.CONFIGURAR,
     ],
-    lider: [
+    líder: [
         PERMS.VER_RESUMEN, PERMS.VER_USUARIOS, // ver listado
         PERMS.VER_CALCULAR, PERMS.CREAR_FICHAJE, PERMS.CERRAR_FICHAJE,
         PERMS.VER_NOMINA, PERMS.EXPORTAR_NOMINA,

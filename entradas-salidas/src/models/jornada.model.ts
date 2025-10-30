@@ -21,7 +21,19 @@ export interface JornadaDoc {
 
     // valores
     valorTotalDia: number;
+
+    // campos adicionales para detalle
+    turnoId?: string;
+    estado?: string;
+    horaEntrada?: string;
+    horaSalida?: string;
+    esDominicalFestivo?: boolean;
+    cruzoMedianoche?: boolean;
+
+    // cualquier otro campo que quieras mostrar
+    [key: string]: any;
 }
+
 
 export interface NominaRow {
     userId: string;
