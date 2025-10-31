@@ -1,6 +1,5 @@
 "use client";
 import * as React from "react";
-import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 const ExcelJS = (await import("exceljs")).default;
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
