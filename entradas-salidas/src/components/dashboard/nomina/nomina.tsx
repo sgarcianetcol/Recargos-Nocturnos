@@ -1,5 +1,8 @@
 "use client";
 import * as React from "react";
+import * as XLSX from "xlsx";
+import { saveAs } from "file-saver";
+const ExcelJS = (await import("exceljs")).default;
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
@@ -124,6 +127,68 @@ setJornadasPorEmpleado(mapJornadas); // 🔹 guardamos aquí las jornadas comple
 
   React.useEffect(() => { cargar(); }, [cargar]);
 
+  // ----------------------- pegar AQUI --------------------------------
+const exportDetalleExcel = async (detalle: { nombre: string; jornadas: JornadaDoc[] } | null) => {
+  if (!detalle || !detalle.jornadas?.length) return;
+
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Detalle");
+
+  // Cabeceras
+  const headers = [
+    "Fecha",
+    "Turno",
+    "Horas Normales",
+    "Extras",
+    "Recargos",
+    "Total $"
+  ];
+  sheet.addRow(headers);
+
+  // Filas por jornada
+  detalle.jornadas.forEach((j: JornadaDoc) => {
+    const extras =
+      (j.extrasDiurnas ?? 0) +
+      (j.extrasNocturnas ?? 0) +
+      (j.extrasDiurnasDominical ?? 0) +
+      (j.extrasNocturnasDominical ?? 0);
+
+    const recargos =
+      (j.recargoNocturnoOrdinario ?? 0) +
+      (j.recargoFestivoDiurno ?? 0) +
+      (j.recargoFestivoNocturno ?? 0);
+
+    sheet.addRow([
+      formatear(j.fecha as string),
+      j.turnoId ?? "",
+      j.horasNormales ?? 0,
+      extras,
+      recargos,
+      j.valorTotalDia ?? 0,
+    ]);
+  });
+
+  // Formato: negrita en la fila de encabezados y ajuste ancho columnas
+  sheet.getRow(1).eachCell((cell) => {
+    cell.font = { bold: true };
+    cell.alignment = { horizontal: "center", vertical: "middle" };
+  });
+
+  const widths = [14, 18, 14, 12, 12, 16];
+  widths.forEach((w, i) => sheet.getColumn(i + 1).width = w);
+
+  // Exportar
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+
+  const safeName = detalle.nombre.replace(/\s+/g, "_");
+  saveAs(blob, `Detalle_${safeName}.xlsx`);
+};
+// ----------------------- fin pegar ----------------------------------
+
+
   const filtrados = rows.filter(r => r.nombre.toLowerCase().includes(busqueda.toLowerCase()));
 
   const exportar = async () => {
@@ -218,44 +283,74 @@ setJornadasPorEmpleado(mapJornadas); // 🔹 guardamos aquí las jornadas comple
         *H. Normales = sumatoria horas base. *H. Extras = todas las horas extra (diurna/nocturna/dominical). *Recargos = horas normales con recargo (nocturnas/festivas/dominicales).
       </p>
 
-      <Dialog open={!!detalleEmpleado} onOpenChange={() => setDetalleEmpleado(null)}>
-        <DialogContent className="max-w-3xl w-full rounded-xl shadow-lg p-6">
-          <DialogHeader className="mb-4">
-            <DialogTitle>DETALLE: {detalleEmpleado?.nombre}</DialogTitle>
-            <DialogClose />
-          </DialogHeader>
-          <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-            <table className="w-full text-sm border-collapse">
-              <thead>
-                  <tr className="border-b bg-gray-100">
-                    <th className="px-4 py-2 text-left font-semibold">Fecha</th>
-                    <th className="px-4 py-2 text-left font-semibold">Turno</th>
 
-                    <th className="px-4 py-2 text-right font-semibold">Horas Normales</th>
-                    <th className="px-4 py-2 text-right font-semibold">Extras</th>
-                    <th className="px-4 py-2 text-right font-semibold">Recargos</th>
-                    <th className="px-4 py-2 text-right font-semibold">Total</th>
-                  </tr>
-                </thead>
+      // dentro de tu componente NominaResumen (asegúrate que JornadaDoc está importado)
+<Dialog open={!!detalleEmpleado} onOpenChange={() => setDetalleEmpleado(null)}>
+  <DialogContent className="max-w-4xl w-full rounded-xl shadow-lg p-6">
+    <DialogHeader className="flex items-center justify-between mb-4">
+      <DialogTitle className="text-lg font-bold">
+        DETALLE: {detalleEmpleado?.nombre}
+      </DialogTitle>
 
-              <tbody>
-                {detalleEmpleado?.jornadas.map(j => (
-                  <tr key={j.id} className="border-b">
-                    <td className="px-2 py-1">{formatear(j.fecha)}</td>
-                    <td className="px-2 py-1">{j.turnoId}</td>
+      {/* BOTÓN EXPORTAR */}
+      <button
+  onClick={() => exportDetalleExcel(detalleEmpleado)}
+  className="px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-md transition"
+>
+  Exportar Excel
+</button>
 
-                    <td className="px-2 py-1 text-right">{clean(j.horasNormales)}</td>
-<td className="px-2 py-1 text-right">{clean(j.extrasDiurnas + j.extrasNocturnas + j.extrasDiurnasDominical + j.extrasNocturnasDominical)}</td>
-<td className="px-2 py-1 text-right">{clean(j.recargoNocturnoOrdinario + j.recargoFestivoDiurno + j.recargoFestivoNocturno)}</td>
-<td className="px-2 py-1 text-right">{money(j.valorTotalDia)}</td>
 
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <DialogClose />
+    </DialogHeader>
+
+    <div className="overflow-x-auto max-h-[70vh] scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 border rounded-lg">
+      <table className="w-full text-sm border-collapse">
+        <thead className="sticky top-0 bg-gray-100">
+          <tr className="border-b">
+            <th className="px-4 py-2 text-left font-semibold">Fecha</th>
+            <th className="px-4 py-2 text-left font-semibold">Turno</th>
+            <th className="px-4 py-2 text-right font-semibold">Horas Normales</th>
+            <th className="px-4 py-2 text-right font-semibold">Extras</th>
+            <th className="px-4 py-2 text-right font-semibold">Recargos</th>
+            <th className="px-4 py-2 text-right font-semibold">Total</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {(detalleEmpleado?.jornadas ?? []).map((j: JornadaDoc) => (
+            <tr key={j.id} className="border-b hover:bg-gray-50">
+              <td className="px-2 py-2">{formatear(j.fecha as string)}</td>
+              <td className="px-2 py-2">{j.turnoId}</td>
+
+              <td className="px-2 py-2 text-right">{clean(j.horasNormales || 0)}</td>
+              <td className="px-2 py-2 text-right">
+                {clean(
+                  (j.extrasDiurnas || 0) +
+                  (j.extrasNocturnas || 0) +
+                  (j.extrasDiurnasDominical || 0) +
+                  (j.extrasNocturnasDominical || 0)
+                )}
+              </td>
+              <td className="px-2 py-2 text-right">
+                {clean(
+                  (j.recargoNocturnoOrdinario || 0) +
+                  (j.recargoFestivoDiurno || 0) +
+                  (j.recargoFestivoNocturno || 0)
+                )}
+              </td>
+              <td className="px-2 py-2 text-right font-semibold">
+                {money(j.valorTotalDia || 0)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </DialogContent>
+</Dialog>
+
+
     </div>
   );
 }
