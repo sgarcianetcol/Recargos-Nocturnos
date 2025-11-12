@@ -341,204 +341,65 @@ export default function NominaResumen() {
         (diurna/nocturna/dominical). *Recargos = horas normales con recargo
         (nocturnas/festivas/dominicales).
       </p>
+
       <Dialog
         open={!!detalleEmpleado}
         onOpenChange={() => setDetalleEmpleado(null)}
       >
-        <DialogContent className="max-w-4xl w-[95vw] h-[90vh] rounded-2xl shadow-2xl p-0 overflow-hidden bg-white flex flex-col">
-          <DialogHeader className="px-6 py-4 bg-gradient-to-r from-gray-900 to-black text-white shrink-0">
-            <div className="flex items-center justify-between">
-              <DialogTitle className="text-xl font-bold flex items-center gap-2">
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                  />
-                </svg>
-                DETALLE: {detalleEmpleado?.nombre}
-              </DialogTitle>
-              <div className="flex items-center gap-2">
-                <Button
-                  onClick={handleDescargarExcel}
-                  variant="outline"
-                  className="bg-white/20 hover:bg-white/30 text-white border-white/30 hover:border-white/50 transition-all duration-200 flex items-center gap-2"
-                >
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                    />
-                  </svg>
-                  Exportar Excel
-                </Button>
-                <Button
-                  variant="ghost"
-                  onClick={() => setDetalleEmpleado(null)}
-                  className="text-white hover:bg-white/20 rounded-full p-2 transition-colors"
-                >
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </Button>
-              </div>
-            </div>
+        <DialogContent className="max-w-3xl w-full rounded-xl shadow-lg p-6">
+          <DialogHeader className="mb-4">
+            <DialogTitle>DETALLE: {detalleEmpleado?.nombre}</DialogTitle>
+            <DialogClose />
           </DialogHeader>
+          <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="border-b bg-gray-100">
+                  <th className="px-4 py-2 text-left font-semibold">Fecha</th>
+                  <th className="px-4 py-2 text-left font-semibold">Turno</th>
 
-          <div className="flex-1 flex flex-col p-6 overflow-hidden">
-            {/* Resumen rápido */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 p-4 bg-gray-50 rounded-xl shrink-0">
-              <div className="text-center">
-                <p className="text-sm text-gray-600 font-medium">Total Horas</p>
-                <p className="text-lg font-bold text-gray-900">
-                  {Math.round(
-                    detalleEmpleado?.jornadas.reduce(
-                      (sum, j) => sum + j.horasNormales,
-                      0
-                    ) || 0
-                  )}
-                </p>
-              </div>
-              <div className="text-center">
-                <p className="text-sm text-gray-600 font-medium">
-                  Total Extras
-                </p>
-                <p className="text-lg font-bold text-orange-600">
-                  {Math.round(
-                    detalleEmpleado?.jornadas.reduce(
-                      (sum, j) =>
-                        sum +
+                  <th className="px-4 py-2 text-right font-semibold">
+                    Horas Normales
+                  </th>
+                  <th className="px-4 py-2 text-right font-semibold">Extras</th>
+                  <th className="px-4 py-2 text-right font-semibold">
+                    Recargos
+                  </th>
+                  <th className="px-4 py-2 text-right font-semibold">Total</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {detalleEmpleado?.jornadas.map((j) => (
+                  <tr key={j.id} className="border-b">
+                    <td className="px-2 py-1">{formatear(j.fecha)}</td>
+                    <td className="px-2 py-1">{j.turnoId}</td>
+
+                    <td className="px-2 py-1 text-right">
+                      {clean(j.horasNormales)}
+                    </td>
+                    <td className="px-2 py-1 text-right">
+                      {clean(
                         j.extrasDiurnas +
-                        j.extrasNocturnas +
-                        j.extrasDiurnasDominical +
-                        j.extrasNocturnasDominical,
-                      0
-                    ) || 0
-                  )}
-                </p>
-              </div>
-              <div className="text-center">
-                <p className="text-sm text-gray-600 font-medium">
-                  Total Recargos
-                </p>
-                <p className="text-lg font-bold text-purple-600">
-                  {Math.round(
-                    detalleEmpleado?.jornadas.reduce(
-                      (sum, j) =>
-                        sum +
+                          j.extrasNocturnas +
+                          j.extrasDiurnasDominical +
+                          j.extrasNocturnasDominical
+                      )}
+                    </td>
+                    <td className="px-2 py-1 text-right">
+                      {clean(
                         j.recargoNocturnoOrdinario +
-                        j.recargoFestivoDiurno +
-                        j.recargoFestivoNocturno,
-                      0
-                    ) || 0
-                  )}
-                </p>
-              </div>
-              <div className="text-center">
-                <p className="text-sm text-gray-600 font-medium">Valor Total</p>
-                <p className="text-lg font-bold text-green-600">
-                  {money(
-                    detalleEmpleado?.jornadas.reduce(
-                      (sum, j) => sum + j.valorTotalDia,
-                      0
-                    ) || 0
-                  )}
-                </p>
-              </div>
-            </div>
-
-            {/* Tabla con scroll */}
-            <div className="flex-1 overflow-hidden rounded-xl border border-gray-200/60 bg-white">
-              <div className="h-full overflow-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-50">
-                <table className="w-full text-sm min-w-[600px]">
-                  <thead className="sticky top-0 z-10">
-                    <tr className="bg-gradient-to-r from-gray-50 to-gray-100/80 border-b border-gray-200">
-                      <th className="px-4 py-3 text-left font-semibold text-gray-700 text-xs uppercase tracking-wider">
-                        Fecha
-                      </th>
-                      <th className="px-4 py-3 text-left font-semibold text-gray-700 text-xs uppercase tracking-wider">
-                        Turno
-                      </th>
-                      <th className="px-4 py-3 text-right font-semibold text-gray-700 text-xs uppercase tracking-wider">
-                        Normales
-                      </th>
-                      <th className="px-4 py-3 text-right font-semibold text-gray-700 text-xs uppercase tracking-wider">
-                        Extras
-                      </th>
-                      <th className="px-4 py-3 text-right font-semibold text-gray-700 text-xs uppercase tracking-wider">
-                        Recargos
-                      </th>
-                      <th className="px-4 py-3 text-right font-semibold text-gray-700 text-xs uppercase tracking-wider">
-                        Total
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200/60">
-                    {detalleEmpleado?.jornadas.map((j, index) => (
-                      <tr
-                        key={j.id}
-                        className={`hover:bg-gray-50/50 transition-colors duration-150 ${
-                          index % 2 === 0 ? "bg-white" : "bg-gray-50/30"
-                        }`}
-                      >
-                        <td className="px-4 py-3 font-medium text-gray-900">
-                          {formatear(j.fecha)}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                            {j.turnoId}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono text-gray-900">
-                          {Math.round(j.horasNormales)}
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono text-orange-600 font-medium">
-                          {Math.round(
-                            j.extrasDiurnas +
-                              j.extrasNocturnas +
-                              j.extrasDiurnasDominical +
-                              j.extrasNocturnasDominical
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono text-purple-600 font-medium">
-                          {Math.round(
-                            j.recargoNocturnoOrdinario +
-                              j.recargoFestivoDiurno +
-                              j.recargoFestivoNocturno
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono text-green-600 font-semibold">
-                          {money(j.valorTotalDia)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                          j.recargoFestivoDiurno +
+                          j.recargoFestivoNocturno
+                      )}
+                    </td>
+                    <td className="px-2 py-1 text-right">
+                      {money(j.valorTotalDia)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </DialogContent>
       </Dialog>
