@@ -1,7 +1,12 @@
 "use client";
 import * as React from "react";
 import * as XLSX from "xlsx";
-import type { Rol } from "@/models/usuarios.model";
+import { collection, query, where, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import {
+  crearEmpleadoConAcceso,
+  EmpleadoService,
+} from "@/services/usuariosService";
 
 import { Edit, Trash2, FileSpreadsheet, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -14,13 +19,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Empleado } from "@/models/usuarios.model";
-import { EmpleadoService } from "@/services/usuariosService";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
@@ -39,15 +44,16 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { CheckCircle2Icon, AlertCircleIcon } from "lucide-react";
+import { CheckCircle2Icon, AlertCircleIcon, InfoIcon } from "lucide-react";
+
+import { getAuth, fetchSignInMethodsForEmail } from "firebase/auth";
 
 export default function UsuariosTable() {
   const normalizeRol = (rol: string): Empleado["rol"] => {
     const lower = rol.toLowerCase().trim();
     if (lower === "admin") return "admin";
-    if (lower === "líder" || lower === "líder") return "líder";
+    if (lower === "líder" || lower === "lider") return "líder";
     return "empleado";
   };
 
@@ -64,11 +70,20 @@ export default function UsuariosTable() {
   const [filtroEmpresa, setFiltroEmpresa] = React.useState<string>("todas");
 
   // AlertDialog de estado
-  const [empleadoAEliminar, setEmpleadoAEliminar] = React.useState<Empleado | null>(null);
+  const [empleadoAEliminar, setEmpleadoAEliminar] =
+    React.useState<Empleado | null>(null);
   const [alertDialogData, setAlertDialogData] = React.useState<{
-    tipo: "success" | "warning";
+    tipo: "success" | "warning" | "info";
     titulo: string;
     descripcion: React.ReactNode;
+  } | null>(null);
+
+  // Import states
+  const [importando, setImportando] = React.useState(false);
+  const [importResult, setImportResult] = React.useState<{
+    creados: number;
+    duplicados: string[];
+    errores: Array<{ row: number; email?: string; reason: string }>;
   } | null>(null);
 
   // Cargar empleados al iniciar
@@ -86,6 +101,7 @@ export default function UsuariosTable() {
       });
       return;
     }
+
     if (
       typeof nuevo.salarioBaseMensual !== "number" ||
       nuevo.salarioBaseMensual <= 0
@@ -99,7 +115,27 @@ export default function UsuariosTable() {
     }
 
     try {
-      await EmpleadoService.crear({
+      // 🔍 Verificar duplicado por documento (cédula)
+      if (nuevo.documento) {
+        const empleadosRef = collection(db, "usuarios");
+        const q = query(
+          empleadosRef,
+          where("documento", "==", nuevo.documento)
+        );
+        const snapshot = await getDocs(q);
+
+        if (!snapshot.empty) {
+          setAlertDialogData({
+            tipo: "warning",
+            titulo: "Documento duplicado",
+            descripcion: `Ya existe un empleado registrado con la cédula ${nuevo.documento}.`,
+          });
+          return; // Detiene el guardado
+        }
+      }
+
+      // ✅ Si pasa la validación, crear empleado
+      const uid = await crearEmpleadoConAcceso({
         nombre: nuevo.nombre!,
         correo: nuevo.correo!,
         documento: nuevo.documento || "",
@@ -112,17 +148,31 @@ export default function UsuariosTable() {
       setAlertDialogData({
         tipo: "success",
         titulo: "Empleado creado ✅",
-        descripcion: `El empleado ${nuevo.nombre} ha sido creado correctamente.`,
+        descripcion: `Se creó el usuario y se envió un correo a ${nuevo.correo} para que defina su contraseña.`,
       });
 
       setOpen(false);
       setNuevo({ rol: "empleado", empresa: "NETCOL" });
       setEmpleados(await EmpleadoService.listar());
     } catch (error: any) {
+      console.error(error);
+
+      let titulo = "Error al crear empleado";
+      let descripcion =
+        error.message ||
+        "Ocurrió un error desconocido al intentar crear el empleado.";
+
+      // ⚠️ Detectar si el correo ya existe en Firebase
+      if (error.code === "auth/email-already-in-use") {
+        titulo = "Correo ya registrado";
+        descripcion = `El correo ${nuevo.correo} ya está en uso. 
+    Usa un correo diferente o revisa si este empleado ya fue creado.`;
+      }
+
       setAlertDialogData({
         tipo: "warning",
-        titulo: "Error al crear empleado",
-        descripcion: error.message || "Ocurrió un error desconocido.",
+        titulo,
+        descripcion,
       });
     }
   };
@@ -154,100 +204,355 @@ export default function UsuariosTable() {
     setEmpleadoAEliminar(null);
   };
 
-  // Importar Excel
-const handleImportExcel = async (event: React.ChangeEvent<HTMLInputElement>) => {
-  const file = event.target.files?.[0];
-  if (!file) return;
+  // Helper: limpiar y convertir salario
+  const parseSalario = (raw: any): number => {
+    if (raw === null || raw === undefined) return NaN;
+    const cleaned = String(raw).replace(/[^0-9.-]+/g, "");
+    const v = Number(cleaned);
+    return Number.isFinite(v) ? v : NaN;
+  };
 
-  const reader = new FileReader();
-  reader.onload = async (e) => {
-    const data = new Uint8Array(e.target?.result as ArrayBuffer);
-    const workbook = XLSX.read(data, { type: "array" });
-    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-    const jsonData = XLSX.utils.sheet_to_json(worksheet);
+  // Descargar CSV de errores
+  const downloadErrorsCsv = (
+    errors: Array<{ row: number; email?: string; reason: string }>,
+    duplicados: string[]
+  ) => {
+    const rows: string[] = [];
+    rows.push(`tipo,detalle`);
+    // duplicados
+    duplicados.forEach((email) => rows.push(`duplicado,${email}`));
+    // errores
+    errors.forEach((e) =>
+      rows.push(`error,Fila ${e.row} | ${e.email ?? "—"} | ${e.reason}`)
+    );
+    const csv = rows.join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", "errores_importacion.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
-    let importados = 0;
-    let duplicados: string[] = [];
+  // Importar Excel (implementación completa)
+  // Importar Excel (implementación completa con validación de duplicados)
+  const handleImportExcel = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    event.target.value = "";
+    setImportando(true);
+    setImportResult(null);
 
-    const usuariosExistentes = await EmpleadoService.listar();
-    const correosExistentes = usuariosExistentes.map((u: any) => u.correo?.toLowerCase());
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, { type: "array" });
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rawData: any[] = XLSX.utils.sheet_to_json(worksheet, {
+        defval: "",
+      });
 
-    // 🔤 Función para normalizar texto (quita tildes, espacios y mayúsculas)
-    const normalizarTexto = (texto: any) =>
-      String(texto || "")
-        .normalize("NFD") // separa acentos
-        .replace(/[\u0300-\u036f]/g, "") // elimina acentos
-        .trim()
-        .toLowerCase();
+      if (rawData.length === 0) {
+        setAlertDialogData({
+          tipo: "warning",
+          titulo: "Importación fallida",
+          descripcion: "El archivo está vacío.",
+        });
+        setImportando(false);
+        return;
+      }
 
-    for (const item of jsonData as any[]) {
-      try {
-        if (!item.Nombre || !item.Correo) continue;
-        const correo = item.Correo.toLowerCase();
-        if (correosExistentes.includes(correo)) {
-          duplicados.push(correo);
+      // Validar encabezados exactos
+      const expectedCols = [
+        "Nombre",
+        "Correo",
+        "Documento",
+        "Rol",
+        "Empresa",
+        "Activo",
+        "SalarioBaseMensual",
+      ];
+      const firstKeys = Object.keys(rawData[0]).map((k) => k.trim());
+      const missing = expectedCols.filter((col) => !firstKeys.includes(col));
+      if (missing.length > 0) {
+        setAlertDialogData({
+          tipo: "warning",
+          titulo: "Columnas faltantes",
+          descripcion: `Faltan columnas obligatorias: ${missing.join(", ")}`,
+        });
+        setImportando(false);
+        return;
+      }
+
+      const auth = getAuth();
+      const VALID_ROLES = ["admin", "líder", "empleado"];
+
+      const result = {
+        creados: 0,
+        duplicados: [] as string[],
+        errores: [] as { row: number; email?: string; reason: string }[],
+      };
+
+      // Procesar fila por fila (secuencial)
+      for (let i = 0; i < rawData.length; i++) {
+        const rowNumber = i + 2; // fila en Excel (encabezado fila 1)
+        const row = rawData[i];
+
+        // Lectura y normalización
+        const nombre = String(row["Nombre"] ?? "").trim();
+        const correoRaw = String(row["Correo"] ?? "").trim();
+        const correo = correoRaw.toLowerCase();
+        const documento = String(row["Documento"] ?? "").trim();
+        const rolRaw = String(row["Rol"] ?? "").trim();
+        const empresa = String(row["Empresa"] ?? "").trim() || "NETCOL";
+        const activoRaw = String(row["Activo"] ?? "").trim();
+        const salarioRaw = row["SalarioBaseMensual"];
+
+        // Validaciones básicas
+        if (!nombre || !correo || !documento) {
+          result.errores.push({
+            row: rowNumber,
+            email: correo || undefined,
+            reason: "Campos obligatorios faltantes (Nombre/Correo/Documento)",
+          });
           continue;
         }
 
-        const rolExcel = normalizarTexto(item.Rol);
-
-        let rolValido: "admin" | "líder" | "empleado";
-        switch (rolExcel) {
-          case "admin":
-            rolValido = "admin";
-            break;
-          case "líder": // sin tilde, pero normalizado arriba
-            rolValido = "líder";
-            break;
-          case "empleado":
-          default:
-            rolValido = "empleado";
-            break;
+        // Validar rol
+        const rolNormalized = rolRaw
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "");
+        if (!VALID_ROLES.includes(rolNormalized)) {
+          result.errores.push({
+            row: rowNumber,
+            email: correo,
+            reason: `Rol inválido: "${rolRaw}"`,
+          });
+          continue;
         }
 
-        await EmpleadoService.crear({
-          nombre: item.Nombre,
-          correo: item.Correo,
-          documento: item.Documento || "",
-          rol: rolValido,
-          empresa: item.Empresa || "NETCOL",
-          activo: true,
-          salarioBaseMensual: Number(
-            String(item.SalarioBaseMensual || item.Salario || "0").replace(/[^0-9.-]+/g, "")
-          ),
-        });
-        importados++;
-        correosExistentes.push(correo);
-      } catch (err) {
-        console.error("Error importando empleado:", err);
-      }
-    }
+        // Mapear a tipo exacto esperado
+        let rolVal: Empleado["rol"] = "empleado";
+        if (rolNormalized === "admin") rolVal = "admin";
+        if (rolNormalized === "lider" || rolNormalized === "líder")
+          rolVal = "líder";
 
+        // Salario
+        const salario = parseSalario(salarioRaw);
+        if (!Number.isFinite(salario) || salario <= 0) {
+          result.errores.push({
+            row: rowNumber,
+            email: correo,
+            reason: "Salario inválido (debe ser número mayor a 0)",
+          });
+          continue;
+        }
 
-    // AlertDialog con iconos y resumen
-    const descripcion = (
-      <div className="flex flex-col gap-1">
-        <p>Empleados agregados: {importados}</p>
-        {duplicados.length > 0 && (
+        // Activo: por defecto true si no viene
+        const activo =
+          activoRaw === ""
+            ? true
+            : ["sí", "si", "true", "1", "yes"].includes(
+                activoRaw.toLowerCase()
+              );
+
+        // 🚫 Verificar duplicado por correo en Firebase Auth
+        try {
+          const methods = await fetchSignInMethodsForEmail(auth, correo);
+          if (Array.isArray(methods) && methods.length > 0) {
+            result.duplicados.push(`${correo} (ya existe en Auth)`);
+            continue;
+          }
+        } catch (err: any) {
+          result.errores.push({
+            row: rowNumber,
+            email: correo,
+            reason: `Error verificando existencia del correo: ${
+              err?.message ?? String(err)
+            }`,
+          });
+          continue;
+        }
+
+        // 🚫 Verificar duplicado por correo o documento en Firestore
+        try {
+          const empleadosRef = collection(db, "usuarios");
+
+          const [correoSnap, documentoSnap] = await Promise.all([
+            getDocs(query(empleadosRef, where("correo", "==", correo))),
+            getDocs(query(empleadosRef, where("documento", "==", documento))),
+          ]);
+
+          if (!correoSnap.empty || !documentoSnap.empty) {
+            result.duplicados.push(
+              `${correo} / ${documento} (ya existe en Firestore)`
+            );
+            continue;
+          }
+        } catch (err: any) {
+          result.errores.push({
+            row: rowNumber,
+            email: correo,
+            reason: `Error verificando duplicados en Firestore: ${
+              err?.message ?? String(err)
+            }`,
+          });
+          continue;
+        }
+
+        // ✅ Crear usuario (Auth + Firestore)
+        try {
+          await crearEmpleadoConAcceso({
+            nombre,
+            correo,
+            documento,
+            rol: rolVal,
+            empresa: empresa as Empleado["empresa"],
+            activo,
+            salarioBaseMensual: salario,
+          });
+          result.creados += 1;
+        } catch (err: any) {
+          result.errores.push({
+            row: rowNumber,
+            email: correo,
+            reason: `Error creando usuario: ${err?.message ?? String(err)}`,
+          });
+          continue;
+        }
+      } // end for
+
+      setImportResult(result);
+
+      const descripcion = (
+        <div className="flex flex-col gap-3 text-sm text-gray-700">
           <p>
-            ⚠️ Duplicados ({duplicados.length}):<br />
-            {duplicados.join(", ")}
+            ✅ <strong>Empleados creados correctamente:</strong>{" "}
+            <span className="text-green-600 font-semibold">
+              {result.creados}
+            </span>
           </p>
-        )}
-      </div>
-    );
 
-    setAlertDialogData({
-      tipo: duplicados.length > 0 ? "warning" : "success",
-      titulo: "Importación completada",
-      descripcion,
-    });
+          {result.duplicados.length > 0 && (
+            <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-2">
+              <p className="font-medium text-yellow-800">
+                ⚠️ Empleados omitidos por duplicado ({result.duplicados.length})
+              </p>
+              <ul className="list-disc ml-5 mt-1">
+                {result.duplicados.slice(0, 5).map((dup, idx) => (
+                  <li key={idx} className="break-all">
+                    {dup}
+                  </li>
+                ))}
+                {result.duplicados.length > 5 && (
+                  <li className="italic text-gray-500">
+                    ...y {result.duplicados.length - 5} más
+                  </li>
+                )}
+              </ul>
+              <p className="text-xs text-yellow-700 mt-1">
+                (Verifica si la cédula o correo ya existen en el sistema)
+              </p>
+            </div>
+          )}
 
-    setEmpleados(await EmpleadoService.listar());
+          {result.errores.length > 0 && (
+            <div className="bg-red-50 border border-red-300 rounded-lg p-2">
+              <p className="font-medium text-red-800">
+                ❌ Errores encontrados ({result.errores.length})
+              </p>
+              <ul className="list-disc ml-5 mt-1">
+                {result.errores.slice(0, 6).map((e, idx) => (
+                  <li key={idx}>
+                    <strong>Fila {e.row}</strong> —{" "}
+                    <span className="text-gray-700">
+                      {e.email ?? "Sin correo"}
+                    </span>{" "}
+                    — <span className="italic text-red-700">{e.reason}</span>
+                  </li>
+                ))}
+                {result.errores.length > 6 && (
+                  <li className="italic text-gray-500">
+                    ...más errores (descarga el CSV para verlos todos)
+                  </li>
+                )}
+              </ul>
+            </div>
+          )}
+
+          <div className="mt-2 border-t pt-2 text-xs text-gray-500">
+            <p>
+              📄 Puedes descargar el reporte completo en formato CSV para
+              revisar los detalles de cada registro procesado.
+            </p>
+          </div>
+        </div>
+      );
+      // ✅ Generar archivo Excel con resultados del proceso
+      const resumenData = result.errores.map((e) => ({
+        Tipo: "❌ Error",
+        Fila: e.row,
+        Correo: e.email ?? "Sin correo",
+        Motivo: e.reason,
+      }));
+
+      const duplicadosData = result.duplicados.map((dup) => ({
+        Tipo: "⚠️ Duplicado",
+        Correo_o_Cédula: dup,
+      }));
+
+      const creadosData = [
+        { Tipo: "✅ Empleados creados correctamente", Total: result.creados },
+      ];
+      // 🔔 Mostrar las mismas alertas también si se exporta o hay duplicados/errores
+      if (
+        result.creados === 0 ||
+        result.duplicados.length > 0 ||
+        result.errores.length > 0
+      ) {
+        setAlertDialogData({
+          tipo: "info",
+          titulo: "Resultado de la importación",
+          descripcion, // <-- Aquí usamos el bloque visual que hiciste arriba
+        });
+      }
+
+      // Combinar todos los datos en una sola hoja
+      const exportData = [...creadosData, ...duplicadosData, ...resumenData];
+
+      // Crear y descargar archivo
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Resumen Importación");
+      XLSX.writeFile(wb, "resultado_importacion.xlsx");
+
+      // Refrescar lista de empleados
+      setEmpleados(await EmpleadoService.listar());
+    } catch (err) {
+      console.error("Error importando archivo:", err);
+      setAlertDialogData({
+        tipo: "warning",
+        titulo: "Error importando",
+        descripcion:
+          (err as Error).message ||
+          "Ocurrió un error desconocido durante la importación.",
+      });
+    } finally {
+      // Limpieza de memoria y estados
+      setImportando(false);
+      setEmpleados((prev) => [...prev]); // Forzar actualización sin duplicar
+      setTimeout(() => {
+        setAlertDialogData(null); // limpia alerta antigua
+      }, 8000);
+    }
   };
-  reader.readAsArrayBuffer(file);
-};
-  // Exportar Excel
+
+  // Exportar Excel (mantengo tu función original)
   const handleExportExcel = () => {
     const data = empleados.map((e) => ({
       Nombre: e.nombre,
@@ -267,9 +572,12 @@ const handleImportExcel = async (event: React.ChangeEvent<HTMLInputElement>) => 
 
   // Filtrado
   const filtrados = empleados.filter((e) => {
-    const coincideNombre = e.nombre?.toLowerCase().includes(search.toLowerCase());
+    const coincideNombre = e.nombre
+      ?.toLowerCase()
+      .includes(search.toLowerCase());
     const coincideRol = filtroRol === "todos" || e.rol === filtroRol;
-    const coincideEmpresa = filtroEmpresa === "todas" || e.empresa === filtroEmpresa;
+    const coincideEmpresa =
+      filtroEmpresa === "todas" || e.empresa === filtroEmpresa;
     return coincideNombre && coincideRol && coincideEmpresa;
   });
 
@@ -383,6 +691,9 @@ const handleImportExcel = async (event: React.ChangeEvent<HTMLInputElement>) => 
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Nuevo Empleado</DialogTitle>
+            <DialogDescription>
+              Completa la información del nuevo empleado y guarda los cambios.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-3">
             <Input
@@ -399,7 +710,9 @@ const handleImportExcel = async (event: React.ChangeEvent<HTMLInputElement>) => 
             <Input
               placeholder="Documento"
               value={nuevo.documento}
-              onChange={(e) => setNuevo({ ...nuevo, documento: e.target.value })}
+              onChange={(e) =>
+                setNuevo({ ...nuevo, documento: e.target.value })
+              }
             />
             <Input
               type="number"
@@ -416,7 +729,9 @@ const handleImportExcel = async (event: React.ChangeEvent<HTMLInputElement>) => 
             />
             <Select
               value={nuevo.rol}
-              onValueChange={(v) => setNuevo({ ...nuevo, rol: v as Empleado["rol"] })}
+              onValueChange={(v) =>
+                setNuevo({ ...nuevo, rol: v as Empleado["rol"] })
+              }
             >
               <SelectTrigger>
                 <SelectValue placeholder="Rol" />
@@ -429,7 +744,9 @@ const handleImportExcel = async (event: React.ChangeEvent<HTMLInputElement>) => 
             </Select>
             <Select
               value={nuevo.empresa}
-              onValueChange={(v) => setNuevo({ ...nuevo, empresa: v as Empleado["empresa"] })}
+              onValueChange={(v) =>
+                setNuevo({ ...nuevo, empresa: v as Empleado["empresa"] })
+              }
             >
               <SelectTrigger>
                 <SelectValue placeholder="Empresa" />
@@ -458,12 +775,16 @@ const handleImportExcel = async (event: React.ChangeEvent<HTMLInputElement>) => 
               <Input
                 placeholder="Nombre"
                 value={editando.nombre}
-                onChange={(e) => setEditando({ ...editando, nombre: e.target.value })}
+                onChange={(e) =>
+                  setEditando({ ...editando, nombre: e.target.value })
+                }
               />
               <Input
                 placeholder="Correo"
                 value={editando.correo}
-                onChange={(e) => setEditando({ ...editando, correo: e.target.value })}
+                onChange={(e) =>
+                  setEditando({ ...editando, correo: e.target.value })
+                }
               />
               <Input
                 type="number"
@@ -480,7 +801,9 @@ const handleImportExcel = async (event: React.ChangeEvent<HTMLInputElement>) => 
               />
               <Select
                 value={editando.rol}
-                onValueChange={(v) => setEditando({ ...editando, rol: v as Empleado["rol"] })}
+                onValueChange={(v) =>
+                  setEditando({ ...editando, rol: v as Empleado["rol"] })
+                }
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Rol" />
@@ -493,7 +816,12 @@ const handleImportExcel = async (event: React.ChangeEvent<HTMLInputElement>) => 
               </Select>
               <Select
                 value={editando.empresa}
-                onValueChange={(v) => setEditando({ ...editando, empresa: v as Empleado["empresa"] })}
+                onValueChange={(v) =>
+                  setEditando({
+                    ...editando,
+                    empresa: v as Empleado["empresa"],
+                  })
+                }
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Empresa" />
@@ -513,14 +841,19 @@ const handleImportExcel = async (event: React.ChangeEvent<HTMLInputElement>) => 
       </Dialog>
 
       {/* AlertDialog para eliminar */}
-      <AlertDialog open={!!empleadoAEliminar} onOpenChange={() => setEmpleadoAEliminar(null)}>
-        <AlertDialogTrigger asChild>
+      <AlertDialog
+        open={!!empleadoAEliminar}
+        onOpenChange={() => setEmpleadoAEliminar(null)}
+      >
+        <AlertDialogTitle asChild>
           <span className="hidden" />
-        </AlertDialogTrigger>
+        </AlertDialogTitle>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {empleadoAEliminar ? `Eliminar a ${empleadoAEliminar.nombre}?` : ""}
+              {empleadoAEliminar
+                ? `Eliminar a ${empleadoAEliminar.nombre}?`
+                : ""}
             </AlertDialogTitle>
             <AlertDialogDescription>
               Esta acción no se puede deshacer.
@@ -540,23 +873,31 @@ const handleImportExcel = async (event: React.ChangeEvent<HTMLInputElement>) => 
       {/* AlertDialog para notificaciones */}
       {alertDialogData && (
         <AlertDialog open={true} onOpenChange={() => setAlertDialogData(null)}>
-          <AlertDialogTrigger asChild>
+          <AlertDialogTitle asChild>
             <span className="hidden" />
-          </AlertDialogTrigger>
+          </AlertDialogTitle>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle className="flex items-center gap-2">
                 {alertDialogData.tipo === "success" ? (
                   <CheckCircle2Icon className="w-5 h-5 text-green-500" />
+                ) : alertDialogData.tipo === "info" ? (
+                  <InfoIcon className="w-5 h-5 text-blue-500" />
                 ) : (
                   <AlertCircleIcon className="w-5 h-5 text-yellow-500" />
                 )}
                 {alertDialogData.titulo}
               </AlertDialogTitle>
-              <AlertDialogDescription>{alertDialogData.descripcion}</AlertDialogDescription>
+              <AlertDialogDescription asChild>
+                <div className="text-muted-foreground text-sm">
+                  {alertDialogData?.descripcion}
+                </div>
+              </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogAction onClick={() => setAlertDialogData(null)}>Cerrar</AlertDialogAction>
+              <AlertDialogAction onClick={() => setAlertDialogData(null)}>
+                Cerrar
+              </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

@@ -1,11 +1,10 @@
-// src/pages/dark-store/index.tsx
 import DashboardLayout from "@/layouts/DashboardLayout";
-import DashboardAdmin from "@/components/dashboard/dashboardAdmin"; // mejor usa alias @
+import DashboardAdmin from "@/components/dashboard/dashboardAdmin";
 
-export default function DarkStorePage() {
-    return ( // 👈 ESTE return es obligatorio
-        <DashboardLayout>
-            <DashboardAdmin />
-        </DashboardLayout>
-    );
+export default function DashboardPage() {
+  return (
+    <DashboardLayout>
+      <DashboardAdmin />
+    </DashboardLayout>
+  );
 }

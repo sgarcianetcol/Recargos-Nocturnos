@@ -11,15 +11,28 @@ import { calcularDiaBasico } from "@/services/calculoBasico.service";
 import { crearJornadaCalculada } from "@/services/jornada.service";
 import { FaUser, FaClock } from "react-icons/fa";
 import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { esDominicalOFestivo } from "@/services/festivos.service";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { CalendarDays } from "lucide-react";
 
 export default function CalcularJornadaPage() {
   const [empleados, setEmpleados] = React.useState<Empleado[]>([]);
   const [turnos, setTurnos] = React.useState<TurnoBase[]>([]);
-  const [nominaCfg, setNominaCfg] = React.useState<{ horasLaboralesMes: number } | null>(null);
+  const [nominaCfg, setNominaCfg] = React.useState<{
+    horasLaboralesMes: number;
+  } | null>(null);
   const [recargos, setRecargos] = React.useState<RecargosConfig | null>(null);
   const [rules, setRules] = React.useState<JornadaRules | null>(null);
 
@@ -36,7 +49,6 @@ export default function CalcularJornadaPage() {
     valores: any;
   }>(null);
 
-
   const exportarExcel = async () => {
     if (!preview) return;
 
@@ -50,7 +62,7 @@ export default function CalcularJornadaPage() {
       "Turno",
       "Tarifa hora",
       ...Object.keys(preview.horas),
-      ...Object.keys(preview.valores)
+      ...Object.keys(preview.valores),
     ];
 
     sheet.addRow(headers);
@@ -62,7 +74,7 @@ export default function CalcularJornadaPage() {
       `${preview.turno.id} (${preview.turno.horaEntrada}–${preview.turno.horaSalida})`,
       preview.tarifa.toLocaleString("es-CO"),
       ...Object.values(preview.horas),
-      ...Object.values(preview.valores)
+      ...Object.values(preview.valores),
     ];
 
     sheet.addRow(data);
@@ -77,8 +89,15 @@ export default function CalcularJornadaPage() {
 
     // 📦 Exportar
     const buffer = await workbook.xlsx.writeBuffer();
-    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-    saveAs(blob, `Jornada_${preview.empleado.nombre}_${fecha?.toLocaleDateString("es-CO")}.xlsx`);
+    const blob = new Blob([buffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    saveAs(
+      blob,
+      `Jornada_${preview.empleado.nombre}_${fecha?.toLocaleDateString(
+        "es-CO"
+      )}.xlsx`
+    );
   };
 
   // ✅ Cargar última búsqueda al montar el componente
@@ -106,7 +125,6 @@ export default function CalcularJornadaPage() {
     }
   }, [userId, turnoId, fecha, preview]);
 
-
   React.useEffect(() => {
     (async () => {
       const [emps, trn, nom, rec, rls] = await Promise.all([
@@ -127,22 +145,33 @@ export default function CalcularJornadaPage() {
   React.useEffect(() => {
     (async () => {
       if (!nominaCfg || !recargos || !rules) return;
-      const emp = empleados.find(e => e.id === userId);
-      const trn = turnos.find(t => t.id === turnoId);
-      if (!emp || !trn || !fecha) { setPreview(null); return; }
 
+      const emp = empleados.find((e) => e.id === userId);
+      const trn = turnos.find((t) => t.id === turnoId);
+      if (!emp || !trn || !fecha) {
+        setPreview(null);
+        return;
+      }
+
+      // Convertimos Date a string "YYYY-MM-DD"
       const fechaStr = fecha.toISOString().split("T")[0];
-      const esDomingo = fecha.getDay() === 0;
-      const esFestivo = await esFestivoColombia(fechaStr);
-      const esDF = esDomingo || esFestivo;
+
+      // Revisamos si es domingo o festivo
+      const esDF = await esDominicalOFestivo(fechaStr);
 
       const calc = calcularDiaBasico(
         emp.salarioBaseMensual,
         nominaCfg,
         recargos,
         rules,
-        { fecha: fechaStr, horaEntrada: trn.horaEntrada, horaSalida: trn.horaSalida, esDominicalFestivo: esDF }
+        {
+          fecha: fechaStr,
+          horaEntrada: trn.horaEntrada,
+          horaSalida: trn.horaSalida,
+          esDominicalFestivo: esDF,
+        }
       );
+
       console.log("Resultado del cálculo:", calc);
 
       setPreview({
@@ -157,10 +186,14 @@ export default function CalcularJornadaPage() {
   }, [userId, fecha, turnoId, empleados, turnos, nominaCfg, recargos, rules]);
 
   const guardar = async () => {
-    const emp = empleados.find(e => e.id === userId);
+    const emp = empleados.find((e) => e.id === userId);
     if (!emp || !fecha || !turnoId) return alert("Completa los campos.");
     const fechaStr = fecha.toISOString().split("T")[0];
-    const id = await crearJornadaCalculada({ empleado: emp, fecha: fechaStr, turnoId });
+    const id = await crearJornadaCalculada({
+      empleado: emp,
+      fecha: fechaStr,
+      turnoId,
+    });
     alert(`✅ Jornada guardada correctamente (ID: ${id})`);
   };
 
@@ -170,7 +203,6 @@ export default function CalcularJornadaPage() {
 
       {/* Sección de filtros */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-
         {/* Empleado */}
         <div className="space-y-2 flex flex-col items-center">
           <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
@@ -202,7 +234,9 @@ export default function CalcularJornadaPage() {
                 variant="outline"
                 className="w-full max-w-sm justify-center rounded-xl border-gray-300"
               >
-                {fecha ? fecha.toLocaleDateString("es-CO") : "Seleccione fecha…"}
+                {fecha
+                  ? fecha.toLocaleDateString("es-CO")
+                  : "Seleccione fecha…"}
               </Button>
             </PopoverTrigger>
             <PopoverContent align="center" className="p-2 rounded-xl">
@@ -236,7 +270,6 @@ export default function CalcularJornadaPage() {
         </div>
       </div>
 
-
       {/* Vista previa */}
       {!preview && (
         <div className="text-sm text-gray-500 italic text-center mt-4">
@@ -248,24 +281,44 @@ export default function CalcularJornadaPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Parámetros */}
           <section className="p-4 rounded-2xl shadow-lg  from-gray-50 to-gray-100">
-            <h2 className="font-semibold mb-3 text-gray-800">Parámetros aplicados</h2>
+            <h2 className="font-semibold mb-3 text-gray-800">
+              Parámetros aplicados
+            </h2>
             <ul className="text-sm space-y-1 text-gray-700">
-              <li><b>Empleado:</b> {preview.empleado.nombre}</li>
-              <li><b>Fecha:</b> {fecha?.toLocaleDateString("es-CO")} {preview.esDF && "— Dominical/Festivo"}</li>
-              <li><b>Turno:</b> {preview.turno.id} ({preview.turno.horaEntrada}–{preview.turno.horaSalida})</li>
-              <li><b>Tarifa hora:</b> ${preview.tarifa.toLocaleString("es-CO")}</li>
-              <li><b>Horas base/día:</b> {rules?.baseDailyHours}</li>
+              <li>
+                <b>Empleado:</b> {preview.empleado.nombre}
+              </li>
+              <li>
+                <b>Fecha:</b> {fecha?.toLocaleDateString("es-CO")}{" "}
+                {preview.esDF && "— Dominical/Festivo"}
+              </li>
+              <li>
+                <b>Turno:</b> {preview.turno.id} ({preview.turno.horaEntrada}–
+                {preview.turno.horaSalida})
+              </li>
+              <li>
+                <b>Tarifa hora:</b> ${preview.tarifa.toLocaleString("es-CO")}
+              </li>
+              <li>
+                <b>Horas base/día:</b> {rules?.baseDailyHours}
+              </li>
             </ul>
           </section>
 
           {/* Total día */}
           <section className="p-4 rounded-2xl shadow-lg  from-indigo-50 to-indigo-100 flex flex-col justify-center items-center">
-            <h2 className="text-lg font-semibold mb-2 text-indigo-700">Total Día $</h2>
+            <h2 className="text-lg font-semibold mb-2 text-indigo-700">
+              Total Día $
+            </h2>
             <div className="text-3xl font-bold text-indigo-800">
-  ${preview?.valores?.valorTotalDia?.toLocaleString("es-CO") ?? "0"}
-</div>
+              $
+              {preview?.valores?.["Valor Total Día"]?.toLocaleString("es-CO") ??
+                "0"}
+            </div>
 
-            <p className="text-xs mt-1 text-indigo-600 text-center">Suma de normales, recargos y extras.</p>
+            <p className="text-xs mt-1 text-indigo-600 text-center">
+              Suma de normales, recargos y extras.
+            </p>
           </section>
 
           {/* Horas */}
@@ -274,7 +327,10 @@ export default function CalcularJornadaPage() {
             <table className="w-full text-sm">
               <tbody className="[&>tr>td]:py-1">
                 {Object.entries(preview.horas).map(([k, v]) => (
-                  <tr key={k}><td>{k}</td><td className="text-right">{String(v)}</td></tr>
+                  <tr key={k}>
+                    <td>{k}</td>
+                    <td className="text-right">{String(v)}</td>
+                  </tr>
                 ))}
               </tbody>
             </table>
@@ -286,7 +342,12 @@ export default function CalcularJornadaPage() {
             <table className="w-full text-sm">
               <tbody className="[&>tr>td]:py-1">
                 {Object.entries(preview.valores).map(([k, v]) => (
-                  <tr key={k}><td>{k}</td><td className="text-right">${Number(v).toLocaleString("es-CO")}</td></tr>
+                  <tr key={k}>
+                    <td>{k}</td>
+                    <td className="text-right">
+                      ${Number(v).toLocaleString("es-CO")}
+                    </td>
+                  </tr>
                 ))}
               </tbody>
             </table>
@@ -315,7 +376,6 @@ export default function CalcularJornadaPage() {
           (Puedes guardar o exportar la jornada)
         </span>
       </div>
-
     </div>
   );
 }

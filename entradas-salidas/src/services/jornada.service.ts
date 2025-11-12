@@ -1,16 +1,27 @@
 // src/services/nomina/jornada.service.ts
 import { db } from "@/lib/firebase";
 import {
-    addDoc,
-    collection,
-    collectionGroup,
-    deleteDoc,
-    doc,
-    getDocs,
-    orderBy,
-    query,
-    serverTimestamp,
-    where,
+  DEFAULT_NOMINA,
+  DEFAULT_RECARGOS,
+  DEFAULT_RULES,
+} from "@/models/defaults";
+import {
+  NominaConfig,
+  RecargosConfig,
+  JornadaRules,
+} from "@/models/config.model";
+import {
+  addDoc,
+  collection,
+  collectionGroup,
+  deleteDoc,
+  doc,
+  updateDoc,
+  getDocs,
+  orderBy,
+  query,
+  serverTimestamp,
+  where,
 } from "firebase/firestore";
 
 import type { Empleado } from "@/models/usuarios.model";
@@ -20,176 +31,209 @@ import { calcularDiaBasico } from "@/services/calculoBasico.service";
 import { esDominicalOFestivo } from "@/services/festivos.service";
 
 export interface JornadaDoc {
-    id?: string;
-    userId: string;
-    empresa: Empleado["empresa"];
+  id?: string;
+  userId: string;
+  empresa: Empleado["empresa"];
 
-    fecha: string;         // "YYYY-MM-DD"
-    turnoId: string;       // "M8" | "T8" | ...
+  fecha: string; // "YYYY-MM-DD"
+  turnoId: string; // "M8" | "T8" | ...
+  finalizadoEn?: any;
+  horaEntrada: string; // "HH:mm"
+  horaSalida: string; // "HH:mm"
+  cruzoMedianoche: boolean;
+  esDominicalFestivo: boolean;
 
-    horaEntrada: string;   // "HH:mm"
-    horaSalida: string;    // "HH:mm"
-    cruzoMedianoche: boolean;
-    esDominicalFestivo: boolean;
+  ubicacion?: string | null; // ✅ aquí se guarda "lat,lng"
 
-    // parámetros aplicados
-    salarioBaseAplicado: number;
-    horasLaboralesMesAplicadas: number;
-    tarifaHoraAplicada: number;
-    rulesAplicadas: { nightStartsAt: string; nightEndsAt: string; baseDailyHours: number; roundToMinutes?: number };
-    recargosAplicados: Record<string, number>;
+  // parámetros aplicados
+  salarioBaseAplicado: number;
+  horasLaboralesMesAplicadas: number;
+  tarifaHoraAplicada: number;
+  rulesAplicadas: {
+    nightStartsAt: string;
+    nightEndsAt: string;
+    baseDailyHours: number;
+    roundToMinutes?: number;
+  };
+  recargosAplicados: Record<string, number>;
 
-    // horas (en horas decimales)
-    horasNormales: number;
-    recargoNocturnoOrdinario: number;
-    recargoFestivoDiurno: number;
-    recargoFestivoNocturno: number;
-    extrasDiurnas: number;
-    extrasNocturnas: number;
-    extrasDiurnasDominical: number;
-    extrasNocturnasDominical: number;
-    totalHoras: number;
+  // horas (en horas decimales)
+  horasNormales: number;
+  recargoNocturnoOrdinario: number;
+  recargoFestivoDiurno: number;
+  recargoFestivoNocturno: number;
+  extrasDiurnas: number;
+  extrasNocturnas: number;
+  extrasDiurnasDominical: number;
+  extrasNocturnasDominical: number;
+  horasExtras: number;
+  totalHoras: number;
 
-    // valores
-    valorHorasNormales: number;
-    valorRecargoNocturnoOrdinario: number;
-    valorRecargoFestivoDiurno: number;
-    valorRecargoFestivoNocturno: number;
-    valorExtrasDiurnas: number;
-    valorExtrasNocturnas: number;
-    valorExtrasDiurnasDominical: number;
-    valorExtrasNocturnasDominical: number;
-    valorTotalDia: number;
+  // valores
+  valorHorasNormales: number;
+  valorRecargoNocturnoOrdinario: number;
+  valorRecargoFestivoDiurno: number;
+  valorRecargoFestivoNocturno: number;
+  valorExtrasDiurnas: number;
+  valorExtrasNocturnas: number;
+  valorExtrasDiurnasDominical: number;
+  valorExtrasNocturnasDominical: number;
+  valorTotalDia: number;
 
-    creadoEn: any;  // serverTimestamp
-    estado: "calculado" | "cerrado";
+  creadoEn: any; // serverTimestamp
+  estado: "calculado" | "cerrado" | "pendiente";
 }
 
-/**
- * Crea una jornada calculada y la guarda en:
- *   usuarios/{empleado.id}/jornadas/{jid}
- */
 export async function crearJornadaCalculada(opts: {
-    empleado: Empleado;
-    fecha: string;    // "YYYY-MM-DD"
-    turnoId: string;  // "M8" | "T8" | ...
+  empleado: Empleado;
+  fecha: string; // "YYYY-MM-DD"
+  turnoId: string; // "M8" | "T8" | ...
 }): Promise<string> {
-    const { empleado, fecha, turnoId } = opts;
+  const { empleado, fecha, turnoId } = opts;
 
-    // 1) Config & turno
-    const [turno, nominaCfg, recargosCfg, rules] = await Promise.all([
-        TurnosService.obtener(turnoId),
-        ConfigNominaService.getNomina(),
-        ConfigNominaService.getRecargos(),
-        ConfigNominaService.getRules(),
-    ]);
-    if (!turno) throw new Error("Turno no encontrado");
+  // 1) Config & turno
+  const [turno, nominaCfgRaw, recargosCfgRaw, rulesRaw] = await Promise.all([
+    TurnosService.obtener(turnoId),
+    ConfigNominaService.getNomina(),
+    ConfigNominaService.getRecargos(),
+    ConfigNominaService.getRules(),
+  ]);
 
-    // 2) Dominical / festivo (Opción 1: sin DB)
-    const esDF = esDominicalOFestivo(fecha);
+  if (!turno) throw new Error("Turno no encontrado");
 
-    // 3) Cálculo
-    const calc = calcularDiaBasico(
-        empleado.salarioBaseMensual,
-        nominaCfg,
-        recargosCfg,
-        rules,
-        { fecha, horaEntrada: turno.horaEntrada, horaSalida: turno.horaSalida, esDominicalFestivo: esDF }
-    );
+  const nominaCfg: NominaConfig = nominaCfgRaw ?? DEFAULT_NOMINA;
+  const recargosCfg: RecargosConfig = recargosCfgRaw ?? DEFAULT_RECARGOS;
+  const rules: JornadaRules = rulesRaw ?? DEFAULT_RULES;
 
-   // 4) Documento final (trazable)
-const docData: Omit<JornadaDoc, "id"> = {
-  userId: empleado.id,
-  empresa: empleado.empresa,
+  // 2) Dominical / festivo
+  const esDF = await esDominicalOFestivo(fecha); // boolean real
 
-  fecha,
-  turnoId,
-  horaEntrada: turno.horaEntrada,
-  horaSalida: turno.horaSalida,
-  cruzoMedianoche: turno.horaSalida <= turno.horaEntrada,
-  esDominicalFestivo: esDF,
+  // 3) Cálculo de jornada
+  const calc = calcularDiaBasico(
+    empleado.salarioBaseMensual ?? 0,
+    nominaCfg,
+    recargosCfg,
+    rules,
+    {
+      fecha,
+      horaEntrada: turno.horaEntrada ?? "08:00",
+      horaSalida: turno.horaSalida ?? "17:00",
+      esDominicalFestivo: esDF,
+    }
+  );
 
-  salarioBaseAplicado: empleado.salarioBaseMensual ?? 0,
-  horasLaboralesMesAplicadas: nominaCfg.horasLaboralesMes ?? 0,
-  tarifaHoraAplicada: calc.tarifaHoraAplicada ?? 0,
-  rulesAplicadas: rules,
-  recargosAplicados: recargosCfg as unknown as Record<string, number>,
+  // 4) Documento final para Firestore
+  const docData: Omit<JornadaDoc, "id"> = {
+    userId: empleado.id,
+    empresa: empleado.empresa,
 
-  // horas (con valores seguros)
-  horasNormales: calc.horas?.horasNormales ?? 0,
-  recargoNocturnoOrdinario: calc.horas?.recargoNocturnoOrdinario ?? 0,
-  recargoFestivoDiurno: calc.horas?.recargoFestivoDiurno ?? 0,
-  recargoFestivoNocturno: calc.horas?.recargoFestivoNocturno ?? 0,
-  extrasDiurnas: calc.horas?.extrasDiurnas ?? 0,
-  extrasNocturnas: calc.horas?.extrasNocturnas ?? 0,
-  extrasDiurnasDominical: calc.horas?.extrasDiurnasDominical ?? 0,
-  extrasNocturnasDominical: calc.horas?.extrasNocturnasDominical ?? 0,
-  totalHoras: calc.horas?.totalHoras ?? 0,
+    fecha,
+    turnoId,
+    horaEntrada: turno.horaEntrada ?? "08:00",
+    horaSalida: turno.horaSalida ?? "17:00",
+    cruzoMedianoche: turno.horaSalida <= turno.horaEntrada,
+    esDominicalFestivo: esDF,
 
-  // valores (con valores seguros)
-  valorHorasNormales: calc.valores?.valorHorasNormales ?? 0,
-  valorRecargoNocturnoOrdinario: calc.valores?.valorRecargoNocturnoOrdinario ?? 0,
-  valorRecargoFestivoDiurno: calc.valores?.valorRecargoFestivoDiurno ?? 0,
-  valorRecargoFestivoNocturno: calc.valores?.valorRecargoFestivoNocturno ?? 0,
-  valorExtrasDiurnas: calc.valores?.valorExtrasDiurnas ?? 0,
-  valorExtrasNocturnas: calc.valores?.valorExtrasNocturnas ?? 0,
-  valorExtrasDiurnasDominical: calc.valores?.valorExtrasDiurnasDominical ?? 0,
-  valorExtrasNocturnasDominical: calc.valores?.valorExtrasNocturnasDominical ?? 0,
-  valorTotalDia: calc.valores?.valorTotalDia ?? 0,
+    salarioBaseAplicado: empleado.salarioBaseMensual ?? 0,
+    horasLaboralesMesAplicadas: nominaCfg.horasLaboralesMes ?? 0,
+    tarifaHoraAplicada: calc.tarifaHoraAplicada ?? 0,
+    rulesAplicadas: rules,
+    recargosAplicados: recargosCfg as unknown as Record<string, number>,
 
-  creadoEn: serverTimestamp(),
-  estado: "calculado",
-};
+    // HORAS
+    horasNormales: calc.horas?.["Hora laboral ordinaria"] ?? 0,
+    recargoNocturnoOrdinario: calc.horas?.["Recargo Nocturno Ordinario"] ?? 0,
+    recargoFestivoDiurno: calc.horas?.["Recargo Festivo Diurno"] ?? 0,
+    recargoFestivoNocturno: calc.horas?.["Recargo Festivo Nocturno"] ?? 0,
+    extrasDiurnas: calc.horas?.["Extras Diurnas"] ?? 0,
+    extrasNocturnas: calc.horas?.["Extras Nocturnas"] ?? 0,
+    extrasDiurnasDominical: calc.horas?.["Extras Diurnas Dominical"] ?? 0,
+    extrasNocturnasDominical: calc.horas?.["Extras Nocturnas Dominical"] ?? 0,
+    horasExtras:
+      (calc.horas?.["Extras Diurnas"] ?? 0) +
+      (calc.horas?.["Extras Nocturnas"] ?? 0) +
+      (calc.horas?.["Extras Diurnas Dominical"] ?? 0) +
+      (calc.horas?.["Extras Nocturnas Dominical"] ?? 0),
+    totalHoras: calc.horas?.["Total Horas"] ?? 0,
 
+    // VALORES
+    valorHorasNormales: calc.valores?.["Valor Hora laboral ordinaria"] ?? 0,
+    valorRecargoNocturnoOrdinario:
+      calc.valores?.["Valor Recargo Nocturno Ordinario"] ?? 0,
+    valorRecargoFestivoDiurno:
+      calc.valores?.["Valor Recargo Festivo Diurno"] ?? 0,
+    valorRecargoFestivoNocturno:
+      calc.valores?.["Valor Recargo Festivo Nocturno"] ?? 0,
+    valorExtrasDiurnas: calc.valores?.["Valor Extras Diurnas"] ?? 0,
+    valorExtrasNocturnas: calc.valores?.["Valor Extras Nocturnas"] ?? 0,
+    valorExtrasDiurnasDominical:
+      calc.valores?.["Valor Extras Diurnas Dominical"] ?? 0,
+    valorExtrasNocturnasDominical:
+      calc.valores?.["Valor Extras Nocturnas Dominical"] ?? 0,
+    valorTotalDia: calc.valores?.["Valor Total Día"] ?? 0,
 
-    // 5) Guardar en subcolección del usuario
-    const ref = await addDoc(
-        collection(db, "usuarios", empleado.id, "jornadas"),
-        docData
-    );
-    return ref.id;
+    creadoEn: serverTimestamp(),
+    estado: "calculado",
+  };
+
+  // 5) Guardar en Firestore
+  const ref = await addDoc(
+    collection(db, "usuarios", empleado.id, "jornadas"),
+    docData
+  );
+  return ref.id;
 }
 
-/** Jornadas de un usuario por rango de fechas (subcolección del usuario) */
+// Actualizar jornada existente
+export async function actualizarJornada(
+  userId: string,
+  jornadaId: string,
+  data: Partial<JornadaDoc>
+) {
+  const ref = doc(db, "usuarios", userId, "jornadas", jornadaId);
+  await updateDoc(ref, data);
+}
+
+// Listar jornadas por usuario y rango
 export async function listarJornadasPorUsuarioRango(opts: {
-    userId: string;
-    desdeISO: string;  // "YYYY-MM-DD"
-    hastaISO: string;  // "YYYY-MM-DD"
+  userId: string;
+  desdeISO: string;
+  hastaISO: string;
 }): Promise<JornadaDoc[]> {
-    const { userId, desdeISO, hastaISO } = opts;
+  const { userId, desdeISO, hastaISO } = opts;
 
-    const q = query(
-        collection(db, "usuarios", userId, "jornadas"),
-        where("fecha", ">=", desdeISO),
-        where("fecha", "<=", hastaISO),
-        orderBy("fecha", "asc")
-    );
+  const q = query(
+    collection(db, "usuarios", userId, "jornadas"),
+    where("fecha", ">=", desdeISO),
+    where("fecha", "<=", hastaISO),
+    orderBy("fecha", "asc")
+  );
 
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...(d.data() as JornadaDoc) }));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as JornadaDoc) }));
 }
 
-/** Jornadas globales por empresa+rango (usa collectionGroup) */
+// Listar jornadas globales por empresa + rango
 export async function listarJornadasPorEmpresaRango(opts: {
-    empresa: Empleado["empresa"];
-    desdeISO: string;
-    hastaISO: string;
+  empresa: Empleado["empresa"];
+  desdeISO: string;
+  hastaISO: string;
 }): Promise<JornadaDoc[]> {
-    const { empresa, desdeISO, hastaISO } = opts;
+  const { empresa, desdeISO, hastaISO } = opts;
 
-    const q = query(
-        collectionGroup(db, "jornadas"),
-        where("empresa", "==", empresa),
-        where("fecha", ">=", desdeISO),
-        where("fecha", "<=", hastaISO),
-        orderBy("fecha", "asc")
-    );
+  const q = query(
+    collectionGroup(db, "jornadas"),
+    where("empresa", "==", empresa),
+    where("fecha", ">=", desdeISO),
+    where("fecha", "<=", hastaISO),
+    orderBy("fecha", "asc")
+  );
 
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...(d.data() as JornadaDoc) }));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as JornadaDoc) }));
 }
 
-/** Eliminar una jornada específica del usuario */
+// Eliminar jornada
 export async function eliminarJornada(userId: string, jornadaId: string) {
-    await deleteDoc(doc(db, "usuarios", userId, "jornadas", jornadaId));
+  await deleteDoc(doc(db, "usuarios", userId, "jornadas", jornadaId));
 }
