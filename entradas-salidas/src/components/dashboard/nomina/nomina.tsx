@@ -8,6 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { getDetalleEmpleado } from "@/services/nomina.service";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -23,6 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogClose,
+  DialogDescription,
 } from "@/components/ui/dialog";
 
 import { db } from "@/lib/firebase";
@@ -45,6 +47,7 @@ export default function NominaResumen() {
   const [empresa, setEmpresa] = React.useState<Empresa | "TODAS">("TODAS");
   const [busqueda, setBusqueda] = React.useState("");
   const [rows, setRows] = React.useState<NominaRow[]>([]);
+
   // mapear jornadas por usuario
   const clean = (n: number) => (n % 1 === 0 ? Math.round(n) : n);
 
@@ -55,9 +58,11 @@ export default function NominaResumen() {
   const [loading, setLoading] = React.useState(false);
   const [nombres, setNombres] = React.useState<Record<string, string>>({});
   const [detalleEmpleado, setDetalleEmpleado] = React.useState<{
+    id: string;
     nombre: string;
-    jornadas: JornadaDoc[];
   } | null>(null);
+
+  const [modalJornadas, setModalJornadas] = React.useState<JornadaDoc[]>([]);
 
   // Precarga nombres
   React.useEffect(() => {
@@ -72,6 +77,33 @@ export default function NominaResumen() {
     })();
   }, []);
 
+  // 🔍 Cargar jornadas del empleado seleccionado (modal de detalle)
+  React.useEffect(() => {
+    if (!detalleEmpleado?.id) return;
+
+    const cargarJornadas = async () => {
+      try {
+        console.log(`⏳ Cargando jornadas de ${detalleEmpleado.nombre}...`);
+        const hoy = new Date().toISOString().split("T")[0];
+
+        const resultado = await getDetalleEmpleado({
+          userId: detalleEmpleado.id,
+          desdeISO: "2025-01-01",
+          hastaISO: hoy,
+        });
+
+        console.log(`✅ ${resultado.length} jornadas encontradas`);
+
+        // 👉 No vuelvas a modificar 'detalleEmpleado' completo, solo guarda las jornadas aparte
+        setModalJornadas(resultado);
+      } catch (err) {
+        console.error("❌ Error cargando jornadas:", err);
+      }
+    };
+
+    cargarJornadas();
+  }, [detalleEmpleado?.id]); // 👈 solo el id, no el objeto entero
+
   // dentro de tu componente
   const cargar = React.useCallback(async () => {
     setLoading(true);
@@ -79,11 +111,9 @@ export default function NominaResumen() {
       console.log("🔹 Iniciando carga de jornadas/resumen...");
       console.log(`📅 Filtrando de: ${inicioISO} a ${finISO}`);
 
-      // Convertir fechas ISO a Timestamps de Firestore
       const inicioTS = Timestamp.fromDate(new Date(inicioISO));
       const finTS = Timestamp.fromDate(new Date(finISO));
 
-      // Construir query
       const base: any[] = [
         where("creadoEn", ">=", inicioTS),
         where("creadoEn", "<=", finTS),
@@ -100,69 +130,76 @@ export default function NominaResumen() {
             );
 
       const snap = await getDocs(q);
-      console.log(
-        `🔹 Total documentos encontrados en Firestore: ${snap.docs.length}`
-      );
-      console.log(
-        "📄 Documentos crudos:",
-        snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-      );
+      console.log(`🔹 Total documentos encontrados: ${snap.docs.length}`);
 
-      // Filtrar solo jornadas válidas si quieres (opcional)
       const list: JornadaDoc[] = snap.docs.map((d) => ({
         id: d.id,
         ...(d.data() as JornadaDoc),
       }));
 
-      // Agrupar todas las jornadas por usuario
-      const mapJornadas: Record<string, JornadaDoc[]> = {};
-      for (const j of list) {
-        if (!j.userId) continue;
-        if (!mapJornadas[j.userId]) mapJornadas[j.userId] = [];
-        mapJornadas[j.userId].push(j);
-      }
+      console.log("📄 Primeras 3 jornadas desde Firestore:", list.slice(0, 3));
 
-      setJornadasPorEmpleado(mapJornadas); // 🔹 guardamos aquí las jornadas completas
+      // 🔹 Cargar datos de empleados (para salario y valorHora)
+      const empleadosSnap = await getDocs(collection(db, "usuarios"));
+      const empleados: Record<string, any> = {};
+      empleadosSnap.forEach((doc) => {
+        empleados[doc.id] = doc.data();
+      });
 
-      // Agrupar por usuario
+      console.log("👥 Empleados cargados:", Object.keys(empleados).length);
+      console.log("📋 Ejemplo empleado:", Object.entries(empleados)[0]);
+
+      // 🔹 Agrupar por usuario
       const map = new Map<string, NominaRow>();
+
       for (const j of list) {
         if (!j.userId) {
           console.warn("⚠️ Jornada sin userId:", j);
           continue;
         }
 
-        const r = map.get(j.userId) ?? {
-          userId: j.userId,
-          nombre: nombres[j.userId] ?? j.userId,
-          hNormales: 0,
-          hExtras: 0,
-          recargosH: 0,
-          total$: 0,
-        };
+        const empleado = empleados[j.userId];
+        const salarioBase = empleado?.salarioBaseMensual ?? 0;
+        const valorHora = salarioBase ? salarioBase / 240 : 0;
+
+        let r = map.get(j.userId);
+        if (!r) {
+          r = {
+            userId: j.userId,
+            nombre: empleado?.nombre ?? nombres[j.userId] ?? j.userId,
+            salarioBaseMensual: salarioBase,
+            valorHora,
+            hNormales: 0,
+            hExtras: 0,
+            recargosH: 0,
+            total$: 0,
+          };
+          map.set(j.userId, r);
+        }
 
         r.hNormales += j.horasNormales ?? 0;
         r.hExtras +=
-          j.extrasDiurnas +
-          j.extrasNocturnas +
-          j.extrasDiurnasDominical +
-          j.extrasNocturnasDominical;
-        r.recargosH +=
-          j.recargoNocturnoOrdinario +
-          j.recargoFestivoDiurno +
-          j.recargoFestivoNocturno;
-        r.total$ += j.valorTotalDia ?? 0;
+          (j.extrasDiurnas ?? 0) +
+          (j.extrasNocturnas ?? 0) +
+          (j.extrasDiurnasDominical ?? 0) +
+          (j.extrasNocturnasDominical ?? 0);
 
-        map.set(j.userId, r);
+        r.recargosH +=
+          (j.recargoNocturnoOrdinario ?? 0) +
+          (j.recargoFestivoDiurno ?? 0) +
+          (j.recargoFestivoNocturno ?? 0);
+
+        r.total$ += j.valorTotalDia ?? 0;
       }
 
+      const rowsFinal = [...map.values()];
       console.log(
-        `✅ Jornadas por empleado cargadas para ${map.size} usuarios`
+        "📊 Resultado final NominaRow (primeros 3):",
+        rowsFinal.slice(0, 3)
       );
 
-      setRows([...map.values()]);
-      console.log(`✅ Resumen generado con ${map.size} empleados con jornadas`);
-      console.log("🔹 Carga finalizada");
+      setRows(rowsFinal);
+      console.log(`✅ Resumen generado con ${rowsFinal.length} empleados`);
     } catch (error) {
       console.error("❌ Error al cargar jornadas:", error);
     } finally {
@@ -177,43 +214,6 @@ export default function NominaResumen() {
   const filtrados = rows.filter((r) =>
     r.nombre.toLowerCase().includes(busqueda.toLowerCase())
   );
-
-  const handleDescargarExcel = async () => {
-    if (!detalleEmpleado) return;
-
-    try {
-      const XLSX = await import("xlsx");
-
-      const data = detalleEmpleado.jornadas.map((j) => ({
-        Fecha: formatear(j.fecha),
-        Turno: j.turnoId,
-        "H. Normales": clean(j.horasNormales),
-        "H. Extras": clean(
-          j.extrasDiurnas +
-            j.extrasNocturnas +
-            j.extrasDiurnasDominical +
-            j.extrasNocturnasDominical
-        ),
-        "Recargos (h)": clean(
-          j.recargoNocturnoOrdinario +
-            j.recargoFestivoDiurno +
-            j.recargoFestivoNocturno
-        ),
-        "Total $": money(j.valorTotalDia),
-      }));
-
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.json_to_sheet(data);
-      XLSX.utils.book_append_sheet(wb, ws, `Detalle_${detalleEmpleado.nombre}`);
-
-      // Formatear fecha para el nombre del archivo
-      const fechaHoy = new Date().toISOString().split("T")[0];
-      XLSX.writeFile(wb, `detalle_${detalleEmpleado.nombre}_${fechaHoy}.xlsx`);
-    } catch (error) {
-      console.error("Error al exportar Excel:", error);
-      alert("Error al exportar el archivo Excel");
-    }
-  };
 
   const exportar = async () => {
     const XLSX = await import("xlsx");
@@ -282,38 +282,56 @@ export default function NominaResumen() {
             <div className="loader border-t-4 border-blue-500 rounded-full w-12 h-12 animate-spin"></div>
           </div>
         )}
+
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Empleado</TableHead>
+              <TableHead className="text-right">Salario Base</TableHead>
+              <TableHead className="text-right">Valor Hora</TableHead>
               <TableHead className="text-right">H. Normales</TableHead>
-              <TableHead className="text-right">H. Extras</TableHead>
+              <TableHead className="text-right">H. Extra Diurnas</TableHead>
+              <TableHead className="text-right">H. Extra Nocturnas</TableHead>
+              <TableHead className="text-right">H. Dominicales</TableHead>
               <TableHead className="text-right">Recargos (h)</TableHead>
-              <TableHead className="text-right">Total $</TableHead>
-              <TableHead>Acciones</TableHead>
+              <TableHead className="text-right">Total Neto</TableHead>
             </TableRow>
           </TableHeader>
+
           <TableBody>
             {filtrados.map((r) => (
               <TableRow key={r.userId}>
-                <TableCell>{r.nombre}</TableCell>
+                <TableCell className="font-medium">{r.nombre}</TableCell>
                 <TableCell className="text-right">
-                  {Math.round(r.hNormales)}
+                  {money(r.salarioBaseMensual ?? 0)}
                 </TableCell>
                 <TableCell className="text-right">
-                  {Math.round(r.hExtras)}
+                  {money(r.valorHora ?? 0)}
                 </TableCell>
                 <TableCell className="text-right">
-                  {Math.round(r.recargosH)}
+                  {r.hNormales?.toFixed(2) ?? 0}
                 </TableCell>
-                <TableCell className="text-right">{money(r.total$)}</TableCell>
-
+                <TableCell className="text-right">
+                  {r.hExtrasDiurnas?.toFixed(2) ?? 0}
+                </TableCell>
+                <TableCell className="text-right">
+                  {r.hExtrasNocturnas?.toFixed(2) ?? 0}
+                </TableCell>
+                <TableCell className="text-right">
+                  {r.hDominicales?.toFixed(2) ?? 0}
+                </TableCell>
+                <TableCell className="text-right">
+                  {r.recargosH?.toFixed(2) ?? 0}
+                </TableCell>
+                <TableCell className="text-right font-semibold text-blue-700">
+                  {money(r.total$ ?? 0)}
+                </TableCell>
                 <TableCell>
                   <Button
                     onClick={() =>
                       setDetalleEmpleado({
+                        id: r.userId,
                         nombre: r.nombre,
-                        jornadas: jornadasPorEmpleado[r.userId] ?? [],
                       })
                     }
                   >
@@ -322,10 +340,11 @@ export default function NominaResumen() {
                 </TableCell>
               </TableRow>
             ))}
+
             {filtrados.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={13}
                   className="text-center py-10 text-muted-foreground"
                 >
                   Sin resultados para este periodo/filtros.
@@ -346,61 +365,128 @@ export default function NominaResumen() {
         open={!!detalleEmpleado}
         onOpenChange={() => setDetalleEmpleado(null)}
       >
-        <DialogContent className="max-w-3xl w-full rounded-xl shadow-lg p-6">
-          <DialogHeader className="mb-4">
-            <DialogTitle>DETALLE: {detalleEmpleado?.nombre}</DialogTitle>
-            <DialogClose />
+        <DialogContent className="max-w-2xl bg-white text-black rounded-2xl shadow-xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-semibold">
+              Detalle del empleado
+            </DialogTitle>
+            <DialogDescription>
+              Jornadas registradas, tanto manuales como automáticas.
+            </DialogDescription>
           </DialogHeader>
-          <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-            <table className="w-full text-sm border-collapse">
-              <thead>
-                <tr className="border-b bg-gray-100">
-                  <th className="px-4 py-2 text-left font-semibold">Fecha</th>
-                  <th className="px-4 py-2 text-left font-semibold">Turno</th>
 
-                  <th className="px-4 py-2 text-right font-semibold">
-                    Horas Normales
-                  </th>
-                  <th className="px-4 py-2 text-right font-semibold">Extras</th>
-                  <th className="px-4 py-2 text-right font-semibold">
-                    Recargos
-                  </th>
-                  <th className="px-4 py-2 text-right font-semibold">Total</th>
-                </tr>
-              </thead>
+          {detalleEmpleado ? (
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-lg font-medium">
+                  {detalleEmpleado.nombre}
+                </h3>
+                <p className="text-sm text-gray-600">
+                  Total jornadas: {modalJornadas?.length || 0}
+                </p>
+              </div>
 
-              <tbody>
-                {detalleEmpleado?.jornadas.map((j) => (
-                  <tr key={j.id} className="border-b">
-                    <td className="px-2 py-1">{formatear(j.fecha)}</td>
-                    <td className="px-2 py-1">{j.turnoId}</td>
+              <div className="grid gap-3">
+                {modalJornadas && modalJornadas.length > 0 ? (
+                  modalJornadas.map((j: any, i: number) => {
+                    const esAutomatica = !!j.historial; // tiene array historial
+                    const inicio = esAutomatica
+                      ? j.horaInicioReal?.toDate?.().toLocaleTimeString() ||
+                        j.historial?.find((h: any) => h.accion === "inicio")
+                          ?.hora
+                      : j.horaEntrada;
+                    const fin = esAutomatica
+                      ? j.horaFinReal?.toDate?.().toLocaleTimeString() ||
+                        j.historial?.find((h: any) => h.accion === "fin")?.hora
+                      : j.horaSalida;
 
-                    <td className="px-2 py-1 text-right">
-                      {clean(j.horasNormales)}
-                    </td>
-                    <td className="px-2 py-1 text-right">
-                      {clean(
-                        j.extrasDiurnas +
-                          j.extrasNocturnas +
-                          j.extrasDiurnasDominical +
-                          j.extrasNocturnasDominical
-                      )}
-                    </td>
-                    <td className="px-2 py-1 text-right">
-                      {clean(
-                        j.recargoNocturnoOrdinario +
-                          j.recargoFestivoDiurno +
-                          j.recargoFestivoNocturno
-                      )}
-                    </td>
-                    <td className="px-2 py-1 text-right">
-                      {money(j.valorTotalDia)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    const ubicacionInicio = esAutomatica
+                      ? j.ubicacionInicio ||
+                        j.historial?.find((h: any) => h.accion === "inicio")
+                          ?.ubicacion
+                      : null;
+
+                    const ubicacionFin = esAutomatica
+                      ? j.ubicacionFin ||
+                        j.historial?.find((h: any) => h.accion === "fin")
+                          ?.ubicacion
+                      : null;
+
+                    return (
+                      <div
+                        key={i}
+                        className="border rounded-xl p-4 bg-gray-50 hover:bg-gray-100 transition-all"
+                      >
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="font-semibold">📅 {j.fecha}</span>
+                          <span className="text-sm text-gray-600">
+                            Turno: {j.turnoId || "N/A"}
+                          </span>
+                        </div>
+
+                        <div className="text-sm space-y-1">
+                          <p>🕐 Entrada: {inicio || "N/A"}</p>
+                          <p>🕒 Salida: {fin || "N/A"}</p>
+
+                          {esAutomatica ? (
+                            <>
+                              {ubicacionInicio && (
+                                <p>
+                                  📍 Inicio:{" "}
+                                  <a
+                                    href={`https://maps.google.com/?q=${ubicacionInicio.lat},${ubicacionInicio.lng}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="underline text-blue-600"
+                                  >
+                                    Ver en mapa
+                                  </a>
+                                </p>
+                              )}
+                              {ubicacionFin && (
+                                <p>
+                                  📍 Fin:{" "}
+                                  <a
+                                    href={`https://maps.google.com/?q=${ubicacionFin.lat},${ubicacionFin.lng}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="underline text-blue-600"
+                                  >
+                                    Ver en mapa
+                                  </a>
+                                </p>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              <p>💼 Estado: {j.estado}</p>
+                              <p>
+                                💰 Valor Día: $
+                                {j.valorTotalDia?.toLocaleString() || 0}
+                              </p>
+                            </>
+                          )}
+
+                          <p className="text-gray-500 text-xs">
+                            Creado:{" "}
+                            {j.creadoEn?.toDate
+                              ? j.creadoEn.toDate().toLocaleString()
+                              : "N/A"}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="text-center text-gray-500 text-sm">
+                    No hay jornadas registradas.
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <p className="text-center text-gray-500">Cargando detalles...</p>
+          )}
         </DialogContent>
       </Dialog>
     </div>
