@@ -1,12 +1,20 @@
 import * as React from "react";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
+import {
+  doc,
+  getDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+} from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { Empleado } from "@/models/usuarios.model";
 import { TurnoBase, RecargosConfig, JornadaRules } from "@/models/config.model";
 import { EmpleadoService } from "@/services/usuariosService";
 import { TurnosService } from "@/services/turnos.service";
 import { ConfigNominaService } from "@/services/config.service";
-import { esFestivoColombia } from "@/services/festivos.service";
 import { calcularDiaBasico } from "@/services/calculoBasico.service";
 import { crearJornadaCalculada } from "@/services/jornada.service";
 import { FaUser, FaClock } from "react-icons/fa";
@@ -144,51 +152,148 @@ export default function CalcularJornadaPage() {
 
   React.useEffect(() => {
     (async () => {
-      if (!nominaCfg || !recargos || !rules) return;
+      if (!nominaCfg || !recargos || !rules || !userId || !fecha) return;
 
-      const emp = empleados.find((e) => e.id === userId);
-      const trn = turnos.find((t) => t.id === turnoId);
-      if (!emp || !trn || !fecha) {
-        setPreview(null);
-        return;
-      }
+      try {
+        console.log("🟦 Iniciando cálculo de jornada...");
+        console.log("➡ userId:", userId);
+        console.log("➡ Fecha seleccionada:", fecha);
 
-      // Convertimos Date a string "YYYY-MM-DD"
-      const fechaStr = fecha.toISOString().split("T")[0];
-
-      // Revisamos si es domingo o festivo
-      const esDF = await esDominicalOFestivo(fechaStr);
-
-      const calc = calcularDiaBasico(
-        emp.salarioBaseMensual,
-        nominaCfg,
-        recargos,
-        rules,
-        {
-          fecha: fechaStr,
-          horaEntrada: trn.horaEntrada,
-          horaSalida: trn.horaSalida,
-          esDominicalFestivo: esDF,
+        const emp = empleados.find((e) => e.id === userId);
+        if (!emp) {
+          console.warn("⚠ No se encontró empleado con ese userId");
+          setPreview(null);
+          return;
         }
-      );
+        console.log("👤 Empleado encontrado:", emp.nombre);
 
-      console.log("Resultado del cálculo:", calc);
+        // Convertimos la fecha a formato para buscar en Firestore
+        const year = fecha.getFullYear();
+        const monthIndex = fecha.getMonth(); // 0..11
+        const day = String(fecha.getDate()).padStart(2, "0");
+        const mm = String(monthIndex + 1).padStart(2, "0");
 
-      setPreview({
-        empleado: emp,
-        turno: trn,
-        esDF,
-        tarifa: calc.tarifaHoraAplicada,
-        horas: calc.horas,
-        valores: calc.valores,
-      });
+        const monthId = `${year}_${mm}`;
+        const dayId = day;
+
+        console.log(
+          `🗓 Buscando malla -> usuarios/${userId}/malla/${monthId}/dias/${dayId}`
+        );
+
+        // 🟢 Traer turno desde Firestore
+        const ref = doc(
+          db,
+          "usuarios",
+          userId,
+          "malla",
+          monthId,
+          "dias",
+          dayId
+        );
+        const snap = await getDoc(ref);
+
+        if (!snap.exists()) {
+          console.warn(
+            "⚠ No se encontró turno asignado para ese día en Firestore"
+          );
+          setPreview(null);
+          return;
+        }
+
+        const data = snap.data();
+        console.log("📄 Datos obtenidos desde Firestore:", data);
+
+        const turnoAsignado = data.turno;
+        console.log("🕓 Turno asignado (Firestore):", turnoAsignado);
+
+        if (!turnoAsignado) {
+          console.warn("⚠ El día no tiene turno definido en la malla");
+          setPreview(null);
+          return;
+        }
+
+        console.log("🔍 Lista completa de turnos disponibles:", turnos);
+        console.log(
+          "🔍 Lista de IDs de turnos:",
+          turnos.map((t) => t.id)
+        );
+        console.log(
+          "🔍 Lista de nombres de turnos:",
+          turnos.map((t) => t.nombre)
+        );
+
+        // Intentamos buscar por ID o por nombre
+        const trn = turnos.find(
+          (t) => t.id === turnoAsignado || t.nombre === turnoAsignado
+        );
+
+        if (!trn) {
+          console.warn("⚠ El turno asignado no existe en la lista de turnos");
+          console.log("🔎 Valor buscado:", turnoAsignado);
+          setPreview(null);
+          return;
+        }
+
+        console.log("✅ Turno encontrado:", trn);
+
+        // Set turnoId for saving
+        setTurnoId(trn.id);
+
+        // Revisamos si es domingo o festivo
+        const fechaStr = fecha.toISOString().split("T")[0];
+        const esDF = await esDominicalOFestivo(fechaStr);
+        console.log("📅 Domingo/Festivo:", esDF);
+
+        // 🟣 Ahora sí calcular
+        const calc = calcularDiaBasico(
+          emp.salarioBaseMensual,
+          nominaCfg,
+          recargos,
+          rules,
+          {
+            fecha: fechaStr,
+            horaEntrada: trn.horaEntrada,
+            horaSalida: trn.horaSalida,
+            esDominicalFestivo: esDF,
+          }
+        );
+
+        console.log("🧮 Resultado del cálculo:", calc);
+
+        // Actualizamos el preview
+        setPreview({
+          empleado: emp,
+          turno: trn,
+          esDF,
+          tarifa: calc.tarifaHoraAplicada,
+          horas: calc.horas,
+          valores: calc.valores,
+        });
+
+        console.log("✅ Preview actualizado correctamente");
+      } catch (error) {
+        console.error("❌ Error al obtener turno de Firestore:", error);
+        setPreview(null);
+      }
     })();
-  }, [userId, fecha, turnoId, empleados, turnos, nominaCfg, recargos, rules]);
+  }, [userId, fecha, empleados, turnos, nominaCfg, recargos, rules]);
 
   const guardar = async () => {
     const emp = empleados.find((e) => e.id === userId);
     if (!emp || !fecha || !turnoId) return alert("Completa los campos.");
     const fechaStr = fecha.toISOString().split("T")[0];
+
+    // Verificar si ya existe una jornada para esta fecha
+    const jornadasRef = collection(db, "usuarios", userId, "jornadas");
+    const q = query(jornadasRef, where("fecha", "==", fechaStr));
+    const querySnapshot = await getDocs(q);
+    if (!querySnapshot.empty) {
+      alert(
+        "Ya existe una jornada creada para esta fecha. No se pueden crear duplicados."
+      );
+      return;
+    }
+
     const id = await crearJornadaCalculada({
       empleado: emp,
       fecha: fechaStr,
@@ -253,20 +358,22 @@ export default function CalcularJornadaPage() {
         {/* Turno */}
         <div className="space-y-2 flex flex-col items-center">
           <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-            <FaClock className="text-gray-500" /> Turnos
+            <FaClock className="text-gray-500" /> Turno
           </label>
-          <Select value={turnoId} onValueChange={setTurnoId}>
-            <SelectTrigger className="w-full max-w-sm rounded-xl">
-              <SelectValue placeholder="Seleccione turno…" />
-            </SelectTrigger>
-            <SelectContent className="w-full max-w-sm">
-              {turnos.map((t) => (
-                <SelectItem key={t.id} value={t.id}>
-                  {t.id} — {t.horaEntrada} a {t.horaSalida}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+
+          <div className="w-full max-w-sm">
+            <div
+              className={`w-full h-10 px-3 flex items-center justify-center border rounded-xl text-sm font-medium ${
+                preview?.turno
+                  ? "bg-white text-gray-800 border-gray-300"
+                  : "bg-gray-100 text-gray-400 border-gray-200 italic"
+              }`}
+            >
+              {preview?.turno
+                ? `${preview.turno.id} — ${preview.turno.horaEntrada} a ${preview.turno.horaSalida}`
+                : "Sin turno asignado para esta fecha"}
+            </div>
+          </div>
         </div>
       </div>
 

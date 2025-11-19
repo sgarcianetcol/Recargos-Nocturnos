@@ -47,6 +47,7 @@ function mapDocToEmpleado(d: DocumentData, id: string): Empleado {
     proyectos: Array.isArray(d.proyectos)
       ? (d.proyectos as string[])
       : undefined,
+    recargosActivos: d.recargosActivos ?? true,
     creadoEn: d.creadoEn?.toDate
       ? d.creadoEn.toDate()
       : d.creadoEn ?? new Date(),

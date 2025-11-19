@@ -10,6 +10,7 @@ export interface TurnoInput {
   horaEntrada: string; // "HH:mm"
   horaSalida: string; // "HH:mm" (si <= entrada ⇒ día siguiente)
   esDominicalFestivo: boolean;
+  recargosActivos?: boolean; // New parameter to control if recargos are active
 }
 
 export function calcularDiaBasico(
@@ -87,19 +88,26 @@ export function calcularDiaBasico(
   const horas = {
     "Total Horas": h(totalMin),
     "Hora laboral ordinaria": h(baseMin),
-    "Recargo Nocturno Ordinario": turno.esDominicalFestivo
-      ? 0
-      : h(normalesNoctMin),
-    "Recargo Festivo Diurno": turno.esDominicalFestivo ? h(normalesDiurMin) : 0,
-    "Recargo Festivo Nocturno": turno.esDominicalFestivo
-      ? h(normalesNoctMin)
-      : 0,
-    "Extras Diurnas": turno.esDominicalFestivo ? 0 : h(extrasDiurMin),
-    "Extras Nocturnas": turno.esDominicalFestivo ? 0 : h(extrasNoctMin),
-    "Extras Diurnas Dominical": turno.esDominicalFestivo ? h(extrasDiurMin) : 0,
-    "Extras Nocturnas Dominical": turno.esDominicalFestivo
-      ? h(extrasNoctMin)
-      : 0,
+    "Recargo Nocturno Ordinario":
+      turno.esDominicalFestivo || !turno.recargosActivos
+        ? 0
+        : h(normalesNoctMin),
+    "Recargo Festivo Diurno":
+      turno.esDominicalFestivo && turno.recargosActivos
+        ? h(normalesDiurMin)
+        : 0,
+    "Recargo Festivo Nocturno":
+      turno.esDominicalFestivo && turno.recargosActivos
+        ? h(normalesNoctMin)
+        : 0,
+    "Extras Diurnas":
+      turno.esDominicalFestivo || !turno.recargosActivos ? 0 : h(extrasDiurMin),
+    "Extras Nocturnas":
+      turno.esDominicalFestivo || !turno.recargosActivos ? 0 : h(extrasNoctMin),
+    "Extras Diurnas Dominical":
+      turno.esDominicalFestivo && turno.recargosActivos ? h(extrasDiurMin) : 0,
+    "Extras Nocturnas Dominical":
+      turno.esDominicalFestivo && turno.recargosActivos ? h(extrasNoctMin) : 0,
   };
 
   // --- VALORES ---
@@ -109,27 +117,33 @@ export function calcularDiaBasico(
     "Valor Recargo Nocturno Ordinario":
       horas["Recargo Nocturno Ordinario"] *
       tarifa *
-      recargos.recargo_nocturno_ordinario,
+      (turno.recargosActivos
+        ? recargos.fixedRecargoValue ?? recargos.recargo_nocturno_ordinario
+        : 0),
     "Valor Recargo Festivo Diurno":
       horas["Recargo Festivo Diurno"] *
       tarifa *
-      recargos.recargo_festivo_diurno,
+      (turno.recargosActivos ? recargos.recargo_festivo_diurno : 0),
     "Valor Recargo Festivo Nocturno":
       horas["Recargo Festivo Nocturno"] *
       tarifa *
-      recargos.recargo_festivo_nocturno,
+      (turno.recargosActivos ? recargos.recargo_festivo_nocturno : 0),
     "Valor Extras Diurnas":
-      horas["Extras Diurnas"] * tarifa * (1 + recargos.extra_diurna),
+      horas["Extras Diurnas"] *
+      tarifa *
+      (turno.recargosActivos ? 1 + recargos.extra_diurna : 1),
     "Valor Extras Nocturnas":
-      horas["Extras Nocturnas"] * tarifa * (1 + recargos.extra_nocturna),
+      horas["Extras Nocturnas"] *
+      tarifa *
+      (turno.recargosActivos ? 1 + recargos.extra_nocturna : 1),
     "Valor Extras Diurnas Dominical":
       horas["Extras Diurnas Dominical"] *
       tarifa *
-      (1 + recargos.extra_diurna_dominical),
+      (turno.recargosActivos ? 1 + recargos.extra_diurna_dominical : 1),
     "Valor Extras Nocturnas Dominical":
       horas["Extras Nocturnas Dominical"] *
       tarifa *
-      (1 + recargos.extra_nocturna_dominical),
+      (turno.recargosActivos ? 1 + recargos.extra_nocturna_dominical : 1),
     "Valor Total Día": 0,
   };
 

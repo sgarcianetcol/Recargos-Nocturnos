@@ -7,6 +7,25 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { EmpleadoService } from "@/services/usuariosService";
 import type { Empleado } from "@/models/usuarios.model";
 import { MallaService } from "@/services/malla.service";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Progress } from "@/components/ui/progress";
+import {
+  writeBatch,
+  collectionGroup,
+  getDocs,
+  collection,
+} from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 const MONTH_NAMES = [
   "Enero",
@@ -25,6 +44,7 @@ const MONTH_NAMES = [
 
 // --- Constantes para localStorage ---
 const LOCAL_STORAGE_KEY = "malla_empleados_workbook";
+const LOCAL_STORAGE_FILENAME_KEY = "malla_empleados_filename";
 
 // --- Funciones de Serialización/Deserialización ---
 // Convierte WorkBook a Base64 para guardarlo en localStorage
@@ -46,7 +66,12 @@ function base64ToWorkbook(base64: string): XLSX.WorkBook {
 
 // ... (Resto de tipos y MONTH_NAMES)
 
-type PreviewCell = { day: number; turno: string | null };
+type PreviewCell = {
+  day: number;
+  turno: string | null;
+  turnoId: string;
+  changed?: boolean;
+};
 type PreviewRow = {
   idx: number; // index interno
   nombre: string;
@@ -70,29 +95,58 @@ export default function MallaEmpleadosPage() {
   const [countNumber, setCountNumber] = React.useState<number | "">(9);
   const [processing, setProcessing] = React.useState(false);
   const [year, setYear] = React.useState<number>(new Date().getFullYear());
+  const [fileName, setFileName] = React.useState<string>("");
 
   // ✅ 1. Estado para las filas del preview
   const [previewRows, setPreviewRows] = React.useState<PreviewRow[]>([]);
 
-  // --- EFECTO: CARGAR WORKBOOK DE LOCAL STORAGE ---
+  // Estado para el diálogo de mensajes
+  const [messageDialogOpen, setMessageDialogOpen] = React.useState(false);
+  const [messageTitle, setMessageTitle] = React.useState("");
+  const [messageDescription, setMessageDescription] = React.useState("");
+
+  // Estado para el progreso
+  const [showProgress, setShowProgress] = React.useState(false);
+  const [progress, setProgress] = React.useState(0);
+
+  // Función para mostrar mensajes
+  const showMessage = (title: string, description: string) => {
+    setMessageTitle(title);
+    setMessageDescription(description);
+    setMessageDialogOpen(true);
+  };
+
+  // --- EFECTO: CARGAR WORKBOOK Y FILENAME DE LOCAL STORAGE ---
   React.useEffect(() => {
     // Solo se ejecuta en el cliente
     if (typeof window === "undefined") return;
 
     const savedBase64 = localStorage.getItem(LOCAL_STORAGE_KEY);
+    const savedFileName = localStorage.getItem(LOCAL_STORAGE_FILENAME_KEY);
+
+    // Cargar filename siempre si existe
+    if (savedFileName) setFileName(savedFileName);
+
     if (savedBase64) {
       try {
         console.log("[STORAGE] Cargando workbook desde localStorage...");
         const wb = base64ToWorkbook(savedBase64);
         setWorkbook(wb);
-        // Generar preview para el mes 0 (Enero) con el workbook cargado
-        setTimeout(() => buildPreviewForMonth(0, wb, true), 100);
+        // No llamar buildPreviewForMonth aquí, se hará en el useEffect de workbook y empleadosMap
       } catch (e) {
         console.error("[STORAGE] Error cargando workbook:", e);
         localStorage.removeItem(LOCAL_STORAGE_KEY); // Limpiar data corrupta
+        // No remover filename, ya que puede persistir sin workbook
       }
     }
   }, []); // Se ejecuta solo al montar el componente
+
+  // --- EFECTO: CONSTRUIR PREVIEW CUANDO WORKBOOK Y EMPLEADOSMAP ESTÉN LISTOS ---
+  React.useEffect(() => {
+    if (workbook && Object.keys(empleadosMap).length > 0) {
+      buildPreviewForMonth(0, workbook, true);
+    }
+  }, [workbook, empleadosMap]);
 
   // Cargar usuarios (map por documento)
   React.useEffect(() => {
@@ -101,9 +155,7 @@ export default function MallaEmpleadosPage() {
       const list = await EmpleadoService.listar({ limite: undefined });
       const map: Record<string, Empleado> = {};
       for (const u of list) {
-        const k = String(u.documento ?? "")
-          .replace(/\s+/g, "")
-          .toLowerCase();
+        const k = String(u.documento ?? "").replace(/\D/g, ""); // Solo dígitos
         if (k) map[k] = u;
       }
       setEmpleadosMap(map);
@@ -117,16 +169,24 @@ export default function MallaEmpleadosPage() {
     const ab = await file.arrayBuffer();
     const wb = XLSX.read(ab, { type: "array" });
     setWorkbook(wb);
+    setFileName(file.name);
 
-    // ✅ Guardar en localStorage
+    // ✅ Guardar filename siempre
+    localStorage.setItem(LOCAL_STORAGE_FILENAME_KEY, file.name);
+
+    // ✅ Guardar workbook si es posible
     try {
       const base64 = workbookToBase64(wb);
       localStorage.setItem(LOCAL_STORAGE_KEY, base64);
       console.log("[STORAGE] Workbook guardado en localStorage.");
     } catch (e) {
-      console.error("[STORAGE] No se pudo guardar en localStorage:", e);
-      alert(
-        "Advertencia: El archivo es muy grande y no se pudo guardar en el navegador. Recarga la página y el archivo desaparecerá."
+      console.error(
+        "[STORAGE] No se pudo guardar workbook en localStorage:",
+        e
+      );
+      showMessage(
+        "Advertencia",
+        "El archivo es muy grande y no se pudo guardar en el navegador. Recarga la página y el archivo desaparecerá."
       );
     }
 
@@ -174,7 +234,14 @@ export default function MallaEmpleadosPage() {
               ...r,
               estado: "corregido",
               cells: r.cells.map((c) =>
-                c.day === day ? { ...c, turno: value || null } : c
+                c.day === day
+                  ? {
+                      ...c,
+                      turno: value || null,
+                      turnoId: value || "",
+                      changed: true,
+                    }
+                  : c
               ),
             }
           : r
@@ -190,7 +257,7 @@ export default function MallaEmpleadosPage() {
   ): Promise<PreviewRow[]> => {
     const wb = wbArg ?? workbook; // Usa el argumento o el estado
     if (!wb) {
-      alert("Primero sube el Excel.");
+      showMessage("Error", "Primero sube el Excel.");
       return [];
     }
 
@@ -202,14 +269,14 @@ export default function MallaEmpleadosPage() {
     // --- FORZAMOS HOJA DE EMPLEADOS FIJA ---
     const empleadosSheet = wb.Sheets["Nombres de los empleados"];
     if (!empleadosSheet) {
-      alert("No se encontró la hoja 'Nombres de los empleados'");
+      showMessage("Error", "No se encontró la hoja 'Nombres de los empleados'");
       return [];
     }
 
     // --- LECTURA FIJA DESDE B4 / C4 SEGÚN CANTIDAD INGRESADA ---
     const numEmpleados = Number(countNumber) || 0;
     if (!numEmpleados || numEmpleados < 1) {
-      alert("Ingresa una cantidad válida de empleados");
+      showMessage("Error", "Ingresa una cantidad válida de empleados");
       return [];
     }
 
@@ -258,12 +325,12 @@ export default function MallaEmpleadosPage() {
     sheetNames[monthIndex] ?? null;
 
     if (!sheetName) {
-      alert(`Usurarios Guardados`);
+      showMessage("Error", "Usuarios Guardados");
       return [];
     }
     const monthSheet = wb.Sheets[sheetName];
     if (!monthSheet) {
-      alert(`Hoja ${sheetName} no encontrada`);
+      showMessage("Error", `Hoja ${sheetName} no encontrada`);
       return [];
     }
 
@@ -289,13 +356,11 @@ export default function MallaEmpleadosPage() {
         const turnoRaw = c?.v ? String(c.v).trim() : "";
         const turno = turnoRaw === "" ? "D" : turnoRaw;
 
-        cells.push({ day: d, turno });
+        cells.push({ day: d, turno: turno, turnoId: turno });
       }
 
       // map documento -> uid
-      const docNorm = String(e.documento ?? "")
-        .replace(/\s+/g, "")
-        .toLowerCase();
+      const docNorm = String(e.documento ?? "").replace(/\D/g, ""); // Solo dígitos
       const match = docNorm ? empleadosMap[docNorm] ?? undefined : undefined;
 
       rows.push({
@@ -320,12 +385,10 @@ export default function MallaEmpleadosPage() {
   // ... (Resto de funciones: linkDocument, saveMonth, saveAllMonths)
   // vincular documento manualmente
   const linkDocument = (rowIdx: number, documento: string) => {
-    const key = String(documento ?? "")
-      .replace(/\s+/g, "")
-      .toLowerCase();
+    const key = String(documento ?? "").replace(/\D/g, ""); // Solo dígitos
     const found = empleadosMap[key];
     if (!found) {
-      alert("Documento no encontrado en usuarios");
+      showMessage("Error", "Documento no encontrado en usuarios");
       return false;
     }
     setPreviewRows((prev) =>
@@ -338,16 +401,30 @@ export default function MallaEmpleadosPage() {
     return true;
   };
 
-  // Guardar UN mes (usa MallaService)
+  // Guardar UN mes (usa MallaService y calcula jornadas)
   const saveMonth = async (monthIndex: number) => {
     if (!previewRows.length) {
-      alert("No hay preview para guardar.");
+      showMessage("Error", "No hay preview para guardar.");
       return;
     }
 
     setProcessing(true);
+    setShowProgress(true);
+    setProgress(0);
+
     try {
       console.log("🟡 Guardando mes:", monthIndex + 1);
+
+      // Simular progreso del 1 al 100
+      const progressInterval = setInterval(() => {
+        setProgress((prev) => {
+          if (prev >= 90) {
+            clearInterval(progressInterval);
+            return 90;
+          }
+          return prev + 10;
+        });
+      }, 200);
 
       const totalOps = await MallaService.saveMonth({
         previewRows,
@@ -355,23 +432,87 @@ export default function MallaEmpleadosPage() {
         monthIndex,
       });
 
+      // Calcular jornadas después de guardar la malla
+      await MallaService.calculateJornadasForMonth({
+        previewRows,
+        year,
+        monthIndex,
+      });
+
+      clearInterval(progressInterval);
+      setProgress(100);
+
       console.log(
         `✅ Guardado del mes ${
           monthIndex + 1
         } completado (${totalOps} escrituras).`
       );
-      alert(`Mes ${monthIndex + 1} guardado correctamente.`);
+      showMessage(
+        "Success",
+        `Mes ${
+          monthIndex + 1
+        } guardado correctamente. Las jornadas han sido calculadas automáticamente.`
+      );
     } catch (err: any) {
       console.error("❌ Error guardando mes:", err);
-      alert("Error guardando mes: " + (err?.message ?? String(err)));
+      showMessage(
+        "Error",
+        "Error guardando mes: " + (err?.message ?? String(err))
+      );
+    } finally {
+      setProcessing(false);
+      setTimeout(() => {
+        setShowProgress(false);
+        setProgress(0);
+      }, 1000);
+    }
+  };
+  // Guardar fila específica (solo días cambiados)
+  const saveRow = async (rowIdx: number) => {
+    const row = previewRows.find((r) => r.idx === rowIdx);
+    if (!row) return;
+
+    setProcessing(true);
+    try {
+      console.log("🟡 Guardando fila:", row.nombre);
+
+      const totalOps = await MallaService.saveDay({
+        row,
+        year,
+        monthIndex: mesSeleccionado,
+      });
+
+      console.log(`✅ Fila guardada (${totalOps} escrituras).`);
+
+      // Marcar como listo y resetear cambios
+      setPreviewRows((prev) =>
+        prev.map((r) =>
+          r.idx === rowIdx
+            ? {
+                ...r,
+                estado: "listo",
+                cells: r.cells.map((c) => ({ ...c, changed: false })),
+              }
+            : r
+        )
+      );
+
+      showMessage("Success", "Fila guardada correctamente.");
+    } catch (err: any) {
+      console.error("❌ Error guardando fila:", err);
+      showMessage(
+        "Error",
+        "Error guardando fila: " + (err?.message ?? String(err))
+      );
     } finally {
       setProcessing(false);
     }
   };
-  // Guardar TODOS los meses (usa MallaService)
+
+  // Guardar TODOS los meses (usa MallaService.saveAllMonths que incluye cálculo de jornadas)
   const saveAllMonths = async () => {
     if (!workbook) {
-      alert("Primero selecciona un archivo Excel.");
+      showMessage("Error", "Primero selecciona un archivo Excel.");
       return;
     }
 
@@ -379,35 +520,95 @@ export default function MallaEmpleadosPage() {
     try {
       console.log("🟡 Guardando TODOS los meses...");
 
-      const months = workbook.SheetNames;
+      const totalOps = await MallaService.saveAllMonths({
+        year,
+        buildRowsForMonth: async (monthIndex: number) => {
+          const previewRows = await buildPreviewForMonth(monthIndex);
+          if (!previewRows || previewRows.length === 0) {
+            console.warn(
+              `⚠️ Mes ${monthIndex + 1}: no hay datos para guardar.`
+            );
+            return [];
+          }
+          return previewRows;
+        },
+      });
 
-      let totalOps = 0;
-
-      for (let i = 0; i < months.length; i++) {
-        // Build preview for each month
-        // Nota: se llama con el índice 'i' y el workbook del estado
-        const previewRows = await buildPreviewForMonth(i);
-        if (!previewRows || previewRows.length === 0) {
-          console.warn(`⚠️ Mes ${i + 1}: no hay datos para guardar.`);
-          continue;
-        }
-
-        const ops = await MallaService.saveMonth({
-          previewRows,
-          year,
-          monthIndex: i,
-        });
-
-        totalOps += ops;
-        console.log(`✅ Mes ${i + 1} guardado (${ops} escrituras).`);
-      }
-
-      alert(`✅ Proceso completado. Total escrituras: ${totalOps}`);
+      showMessage(
+        "Success",
+        `Proceso completado. Total escrituras: ${totalOps}. Las jornadas han sido calculadas automáticamente.`
+      );
       console.log(`🏁 Guardado global finalizado con ${totalOps} operaciones.`);
     } catch (err: any) {
       console.error("❌ Error guardando todos los meses:", err);
-      alert(
+      showMessage(
+        "Error",
         "Error guardando todos los meses: " + (err?.message ?? String(err))
+      );
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  // Eliminar TODO: jornadas, malla y archivo Excel
+  const eliminarTodo = async () => {
+    setProcessing(true);
+    try {
+      console.log("🟡 Eliminando TODAS las jornadas y malla...");
+
+      // Función auxiliar para eliminar en batches
+      const deleteInBatches = async (query: any) => {
+        const snapshot = await getDocs(query);
+        const batchSize = 400; // Límite seguro por batch
+        let totalDeleted = 0;
+
+        for (let i = 0; i < snapshot.docs.length; i += batchSize) {
+          const batch = writeBatch(db);
+          const batchDocs = snapshot.docs.slice(i, i + batchSize);
+
+          batchDocs.forEach((doc) => {
+            batch.delete(doc.ref);
+          });
+
+          await batch.commit();
+          totalDeleted += batchDocs.length;
+          console.log(`✅ Batch eliminado: ${batchDocs.length} documentos`);
+        }
+
+        return totalDeleted;
+      };
+
+      // Eliminar todas las jornadas
+      const jornadasQuery = collectionGroup(db, "jornadas");
+      const jornadasDeleted = await deleteInBatches(jornadasQuery);
+      console.log(`🗑️ Jornadas eliminadas: ${jornadasDeleted}`);
+
+      // Eliminar toda la malla (días)
+      const diasQuery = collectionGroup(db, "dias");
+      const diasDeleted = await deleteInBatches(diasQuery);
+      console.log(`🗑️ Días de malla eliminados: ${diasDeleted}`);
+
+      // Limpiar localStorage
+      localStorage.removeItem(LOCAL_STORAGE_KEY);
+      localStorage.removeItem(LOCAL_STORAGE_FILENAME_KEY);
+
+      // Resetear estado
+      setWorkbook(null);
+      setFileName("");
+      setPreviewRows([]);
+      setMesSeleccionado(0);
+      setDiasMes(31);
+
+      showMessage(
+        "Success",
+        `Todo ha sido eliminado correctamente. Jornadas: ${jornadasDeleted}, Días: ${diasDeleted}.`
+      );
+      console.log("🏁 Eliminación completa finalizada.");
+    } catch (err: any) {
+      console.error("❌ Error eliminando todo:", err);
+      showMessage(
+        "Error",
+        "Error eliminando todo: " + (err?.message ?? String(err))
       );
     } finally {
       setProcessing(false);
@@ -433,11 +634,22 @@ export default function MallaEmpleadosPage() {
         </div>
       </header>
 
+      {showProgress && (
+        <div className="mb-4">
+          <Progress value={progress} className="w-full" />
+          <p className="text-sm text-center mt-2">
+            Guardando mes... {progress}%
+          </p>
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-4 items-center">
         <label className="flex items-center gap-2">
           <Input type="file" accept=".xlsx,.xls" onChange={onFile} />
-          {workbook && (
-            <span className="text-xs text-green-600">✅ Excel cargado</span>
+          {fileName && (
+            <span className="text-xs text-green-600">
+              ✅ Excel cargado: {fileName}
+            </span>
           )}
         </label>
         <div>
@@ -455,6 +667,22 @@ export default function MallaEmpleadosPage() {
             ))}
           </select>
         </div>
+        <div className="flex items-center gap-2">
+          <label className="text-sm">Empleados:</label>
+          <input
+            type="number"
+            value={countNumber}
+            onChange={(e) =>
+              setCountNumber(
+                e.target.value === "" ? "" : Number(e.target.value)
+              )
+            }
+            className="border px-2 rounded w-20"
+            placeholder="9"
+            min="1"
+            max="50"
+          />
+        </div>
 
         <div className="flex items-center gap-2">
           <Button
@@ -469,8 +697,48 @@ export default function MallaEmpleadosPage() {
           >
             Guardar todos los meses
           </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" disabled={processing}>
+                Eliminar TODO
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Esta acción eliminará TODAS las jornadas creadas, TODA la
+                  malla guardada y el archivo Excel cargado. Esta acción no se
+                  puede deshacer.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={eliminarTodo}>
+                  Sí, eliminar TODO
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </div>
+
+      {/* Message Dialog */}
+      <AlertDialog open={messageDialogOpen} onOpenChange={setMessageDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{messageTitle}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {messageDescription}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setMessageDialogOpen(false)}>
+              OK
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <div>
         <p className="text-sm text-muted-foreground">Días en mes: {diasMes}</p>
@@ -489,7 +757,6 @@ export default function MallaEmpleadosPage() {
                   {i + 1}
                 </th>
               ))}
-              <th className="p-2">Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -519,18 +786,28 @@ export default function MallaEmpleadosPage() {
                 ))}
                 <td className="p-2">
                   {row.uid ? (
-                    <Button
-                      size="sm"
-                      onClick={() =>
-                        setPreviewRows((prev) =>
-                          prev.map((r) =>
-                            r.idx === row.idx ? { ...r, estado: "listo" } : r
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => saveRow(row.idx)}
+                        disabled={processing}
+                      >
+                        Guardar Cambios
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          setPreviewRows((prev) =>
+                            prev.map((r) =>
+                              r.idx === row.idx ? { ...r, estado: "listo" } : r
+                            )
                           )
-                        )
-                      }
-                    >
-                      Confirmar
-                    </Button>
+                        }
+                      >
+                        Confirmar
+                      </Button>
+                    </div>
                   ) : (
                     <div className="flex gap-2">
                       <Input

@@ -29,67 +29,15 @@ import { TurnosService } from "@/services/turnos.service";
 import { ConfigNominaService } from "@/services/config.service";
 import { calcularDiaBasico } from "@/services/calculoBasico.service";
 import { esDominicalOFestivo } from "@/services/festivos.service";
-
-export interface JornadaDoc {
-  id?: string;
-  userId: string;
-  empresa: Empleado["empresa"];
-
-  fecha: string; // "YYYY-MM-DD"
-  turnoId: string; // "M8" | "T8" | ...
-  finalizadoEn?: any;
-  horaEntrada: string; // "HH:mm"
-  horaSalida: string; // "HH:mm"
-  cruzoMedianoche: boolean;
-  esDominicalFestivo: boolean;
-
-  ubicacion?: string | null; // ✅ aquí se guarda "lat,lng"
-
-  // parámetros aplicados
-  salarioBaseAplicado: number;
-  horasLaboralesMesAplicadas: number;
-  tarifaHoraAplicada: number;
-  rulesAplicadas: {
-    nightStartsAt: string;
-    nightEndsAt: string;
-    baseDailyHours: number;
-    roundToMinutes?: number;
-  };
-  recargosAplicados: Record<string, number>;
-
-  // horas (en horas decimales)
-  horasNormales: number;
-  recargoNocturnoOrdinario: number;
-  recargoFestivoDiurno: number;
-  recargoFestivoNocturno: number;
-  extrasDiurnas: number;
-  extrasNocturnas: number;
-  extrasDiurnasDominical: number;
-  extrasNocturnasDominical: number;
-  horasExtras: number;
-  totalHoras: number;
-
-  // valores
-  valorHorasNormales: number;
-  valorRecargoNocturnoOrdinario: number;
-  valorRecargoFestivoDiurno: number;
-  valorRecargoFestivoNocturno: number;
-  valorExtrasDiurnas: number;
-  valorExtrasNocturnas: number;
-  valorExtrasDiurnasDominical: number;
-  valorExtrasNocturnasDominical: number;
-  valorTotalDia: number;
-
-  creadoEn: any; // serverTimestamp
-  estado: "calculado" | "cerrado" | "pendiente";
-}
+import { JornadaDoc } from "@/models/jornada.model";
 
 export async function crearJornadaCalculada(opts: {
   empleado: Empleado;
   fecha: string; // "YYYY-MM-DD"
   turnoId: string; // "M8" | "T8" | ...
+  jornadaReal?: { horaEntrada?: Date; horaSalida?: Date }; // <-- NUEVO: horas reales opcionales
 }): Promise<string> {
-  const { empleado, fecha, turnoId } = opts;
+  const { empleado, fecha, turnoId, jornadaReal } = opts;
 
   // 1) Config & turno
   const [turno, nominaCfgRaw, recargosCfgRaw, rulesRaw] = await Promise.all([
@@ -106,9 +54,25 @@ export async function crearJornadaCalculada(opts: {
   const rules: JornadaRules = rulesRaw ?? DEFAULT_RULES;
 
   // 2) Dominical / festivo
-  const esDF = await esDominicalOFestivo(fecha); // boolean real
+  const esDF = await esDominicalOFestivo(fecha);
 
   // 3) Cálculo de jornada
+  const horaEntradaCalc = jornadaReal?.horaEntrada
+    ? jornadaReal.horaEntrada.toLocaleTimeString("es-CO", {
+        hour12: false,
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : turno.horaEntrada ?? "08:00";
+
+  const horaSalidaCalc = jornadaReal?.horaSalida
+    ? jornadaReal.horaSalida.toLocaleTimeString("es-CO", {
+        hour12: false,
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : turno.horaSalida ?? "17:00";
+
   const calc = calcularDiaBasico(
     empleado.salarioBaseMensual ?? 0,
     nominaCfg,
@@ -116,9 +80,10 @@ export async function crearJornadaCalculada(opts: {
     rules,
     {
       fecha,
-      horaEntrada: turno.horaEntrada ?? "08:00",
-      horaSalida: turno.horaSalida ?? "17:00",
+      horaEntrada: horaEntradaCalc,
+      horaSalida: horaSalidaCalc,
       esDominicalFestivo: esDF,
+      recargosActivos: empleado.recargosActivos ?? true, // Use employee's recargos setting, default to true
     }
   );
 
@@ -126,14 +91,12 @@ export async function crearJornadaCalculada(opts: {
   const docData: Omit<JornadaDoc, "id"> = {
     userId: empleado.id,
     empresa: empleado.empresa,
-
     fecha,
     turnoId,
     horaEntrada: turno.horaEntrada ?? "08:00",
     horaSalida: turno.horaSalida ?? "17:00",
     cruzoMedianoche: turno.horaSalida <= turno.horaEntrada,
     esDominicalFestivo: esDF,
-
     salarioBaseAplicado: empleado.salarioBaseMensual ?? 0,
     horasLaboralesMesAplicadas: nominaCfg.horasLaboralesMes ?? 0,
     tarifaHoraAplicada: calc.tarifaHoraAplicada ?? 0,
@@ -176,7 +139,6 @@ export async function crearJornadaCalculada(opts: {
     estado: "calculado",
   };
 
-  // 5) Guardar en Firestore
   const ref = await addDoc(
     collection(db, "usuarios", empleado.id, "jornadas"),
     docData

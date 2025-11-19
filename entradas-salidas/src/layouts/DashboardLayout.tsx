@@ -27,6 +27,7 @@ import {
   BarChart3,
   Bolt,
   Calculator,
+  Calendar,
   FolderArchive,
   LogOut,
   Users,
@@ -48,6 +49,7 @@ const menuAdmin = [
 
 const menuEmpleado = [
   { title: "Mi jornada", icon: BarChart3, href: "/empleado" },
+  { title: "Malla", icon: Calendar, href: "/malla" },
 ];
 
 export default function DashboardLayout({

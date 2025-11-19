@@ -11,6 +11,7 @@ export interface RecargosConfig {
   extra_nocturna: number; // 0.75
   extra_diurna_dominical: number; // 1.00
   extra_nocturna_dominical: number; // 1.50
+  fixedRecargoValue?: number; // Optional fixed value for recargo nocturno
 }
 
 export interface TurnoBase {
