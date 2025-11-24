@@ -10,10 +10,10 @@ export const DEFAULT_RECARGOS: RecargosConfig = {
   recargo_nocturno_ordinario: 0.35,
   recargo_festivo_diurno: 0.8,
   recargo_festivo_nocturno: 1.15,
-  extra_diurna: 0.25,
-  extra_nocturna: 0.75,
-  extra_diurna_dominical: 1.05,
-  extra_nocturna_dominical: 1.55,
+  extra_diurna: 1.25,
+  extra_nocturna: 1.75,
+  extra_diurna_dominical: 2.05,
+  extra_nocturna_dominical: 2.55,
 };
 
 export const DEFAULT_RULES: JornadaRules = {

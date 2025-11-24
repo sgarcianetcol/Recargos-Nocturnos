@@ -26,6 +26,18 @@ import {
   collection,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import {
+  CheckCircle,
+  Upload,
+  Save,
+  Trash2,
+  Calendar,
+  Users,
+  FileSpreadsheet,
+} from "lucide-react";
 
 const MONTH_NAMES = [
   "Enero",
@@ -45,6 +57,7 @@ const MONTH_NAMES = [
 // --- Constantes para localStorage ---
 const LOCAL_STORAGE_KEY = "malla_empleados_workbook";
 const LOCAL_STORAGE_FILENAME_KEY = "malla_empleados_filename";
+const LOCAL_STORAGE_CHANGES_KEY = "malla_changes";
 
 // --- Funciones de Serialización/Deserialización ---
 // Convierte WorkBook a Base64 para guardarlo en localStorage
@@ -97,6 +110,9 @@ export default function MallaEmpleadosPage() {
   const [year, setYear] = React.useState<number>(new Date().getFullYear());
   const [fileName, setFileName] = React.useState<string>("");
 
+  // Estado para meses seleccionados para guardar
+  const [selectedMonths, setSelectedMonths] = React.useState<number[]>([]);
+
   // ✅ 1. Estado para las filas del preview
   const [previewRows, setPreviewRows] = React.useState<PreviewRow[]>([]);
 
@@ -148,11 +164,10 @@ export default function MallaEmpleadosPage() {
     }
   }, [workbook, empleadosMap]);
 
-  // Cargar usuarios (map por documento)
+  // Cargar usuarios (map por documento) - Solo activos para mejorar rendimiento
   React.useEffect(() => {
-    // ... (Tu código actual de carga de usuarios)
     (async () => {
-      const list = await EmpleadoService.listar({ limite: undefined });
+      const list = await EmpleadoService.listar({ soloActivos: true });
       const map: Record<string, Empleado> = {};
       for (const u of list) {
         const k = String(u.documento ?? "").replace(/\D/g, ""); // Solo dígitos
@@ -247,6 +262,17 @@ export default function MallaEmpleadosPage() {
           : r
       )
     );
+
+    // Guardar cambio en localStorage
+    const changesKey = `${mesSeleccionado}-${rowIdx}-${day}`;
+    const existingChanges = JSON.parse(
+      localStorage.getItem(LOCAL_STORAGE_CHANGES_KEY) || "{}"
+    );
+    existingChanges[changesKey] = value || "";
+    localStorage.setItem(
+      LOCAL_STORAGE_CHANGES_KEY,
+      JSON.stringify(existingChanges)
+    );
   };
 
   // Construir preview para 1 mes
@@ -282,7 +308,7 @@ export default function MallaEmpleadosPage() {
 
     console.log("[PREVIEW] Cantidad de empleados ingresada:", numEmpleados);
 
-    let empleadosList: { nombre: string; documento?: string; row?: number }[] =
+    const empleadosList: { nombre: string; documento?: string; row?: number }[] =
       [];
 
     for (let i = 0; i < numEmpleados; i++) {
@@ -372,6 +398,22 @@ export default function MallaEmpleadosPage() {
         estado: match ? "pendiente" : "sin-usuario",
       });
     }
+
+    // Aplicar cambios guardados en localStorage para este mes
+    const existingChanges = JSON.parse(
+      localStorage.getItem(LOCAL_STORAGE_CHANGES_KEY) || "{}"
+    );
+    rows.forEach((row) => {
+      row.cells.forEach((cell) => {
+        const changesKey = `${monthIndex}-${row.idx}-${cell.day}`;
+        if (existingChanges[changesKey] !== undefined) {
+          cell.turno = existingChanges[changesKey] || null;
+          cell.turnoId = existingChanges[changesKey] || "";
+          cell.changed = true;
+          row.estado = "corregido";
+        }
+      });
+    });
 
     if (setState) {
       setPreviewRows(rows);
@@ -484,18 +526,54 @@ export default function MallaEmpleadosPage() {
 
       console.log(`✅ Fila guardada (${totalOps} escrituras).`);
 
-      // Marcar como listo y resetear cambios
-      setPreviewRows((prev) =>
-        prev.map((r) =>
-          r.idx === rowIdx
-            ? {
-                ...r,
-                estado: "listo",
-                cells: r.cells.map((c) => ({ ...c, changed: false })),
-              }
-            : r
-        )
-      );
+      // Actualizar el workbook con los nuevos turnos
+      if (workbook) {
+        const updatedWorkbook = {
+          ...workbook,
+          Sheets: { ...workbook.Sheets },
+        };
+
+        const monthName = MONTH_NAMES[mesSeleccionado];
+        const sheetName = Object.keys(updatedWorkbook.Sheets).find((s) =>
+          s.toLowerCase().includes(monthName.toLowerCase())
+        );
+        if (sheetName) {
+          const sheet = updatedWorkbook.Sheets[sheetName];
+          const changedCells = row.cells.filter((c) => c.changed);
+
+          // Encontrar la fila del empleado en el Excel (basado en el preview)
+          // Asumiendo que el rowNum es 9 + idx, pero necesitamos mapear correctamente
+          // Para simplicidad, buscar por nombre o documento, pero como es preview, usar el idx
+          // En buildPreviewForMonth, empleadosList[idx].row = 9 + idx
+          const rowNum = 9 + rowIdx; // Ajustar si es necesario
+
+          changedCells.forEach((cell) => {
+            const colIndex = 2 + cell.day; // C = col 2
+            const colLetter = XLSX.utils.encode_col(colIndex - 1);
+            const addr = `${colLetter}${rowNum}`;
+            if (sheet[addr]) {
+              sheet[addr].v = cell.turnoId || cell.turno || "";
+            } else {
+              sheet[addr] = { t: "s", v: cell.turnoId || cell.turno || "" };
+            }
+          });
+
+          // Actualizar el estado del workbook
+          setWorkbook(updatedWorkbook);
+
+          // Guardar el workbook actualizado en localStorage
+          try {
+            const base64 = workbookToBase64(updatedWorkbook);
+            localStorage.setItem(LOCAL_STORAGE_KEY, base64);
+            console.log("[STORAGE] Workbook actualizado en localStorage.");
+          } catch (e) {
+            console.error("[STORAGE] Error guardando workbook:", e);
+          }
+
+          // Reconstruir el preview con el workbook actualizado
+          await buildPreviewForMonth(mesSeleccionado, updatedWorkbook, true);
+        }
+      }
 
       showMessage("Success", "Fila guardada correctamente.");
     } catch (err: any) {
@@ -506,6 +584,84 @@ export default function MallaEmpleadosPage() {
       );
     } finally {
       setProcessing(false);
+    }
+  };
+
+  // Guardar meses seleccionados
+  const saveSelectedMonths = async () => {
+    if (!workbook) {
+      showMessage("Error", "Primero selecciona un archivo Excel.");
+      return;
+    }
+
+    if (selectedMonths.length === 0) {
+      showMessage("Error", "Selecciona al menos un mes para guardar.");
+      return;
+    }
+
+    setProcessing(true);
+    setShowProgress(true);
+    setProgress(0);
+
+    try {
+      console.log(
+        "🟡 Guardando meses seleccionados:",
+        selectedMonths.map((m) => m + 1)
+      );
+
+      let totalOps = 0;
+      const progressStep = 100 / selectedMonths.length;
+
+      for (let i = 0; i < selectedMonths.length; i++) {
+        const monthIndex = selectedMonths[i];
+        const previewRows = await buildPreviewForMonth(
+          monthIndex,
+          undefined,
+          false
+        );
+        if (!previewRows || previewRows.length === 0) {
+          console.warn(`⚠️ Mes ${monthIndex + 1}: no hay datos para guardar.`);
+          continue;
+        }
+
+        const ops = await MallaService.saveMonth({
+          previewRows,
+          year,
+          monthIndex,
+        });
+
+        // Calcular jornadas después de guardar la malla
+        await MallaService.calculateJornadasForMonth({
+          previewRows,
+          year,
+          monthIndex,
+        });
+
+        totalOps += ops;
+        setProgress((i + 1) * progressStep);
+      }
+
+      setProgress(100);
+
+      showMessage(
+        "Success",
+        `Meses seleccionados guardados correctamente. Total escrituras: ${totalOps}. Las jornadas han sido calculadas automáticamente.`
+      );
+      console.log(
+        `🏁 Guardado de meses seleccionados finalizado con ${totalOps} operaciones.`
+      );
+    } catch (err: any) {
+      console.error("❌ Error guardando meses seleccionados:", err);
+      showMessage(
+        "Error",
+        "Error guardando meses seleccionados: " + (err?.message ?? String(err))
+      );
+    } finally {
+      setProcessing(false);
+      setTimeout(() => {
+        setShowProgress(false);
+        setProgress(0);
+      }, 1000);
     }
   };
 
@@ -616,112 +772,216 @@ export default function MallaEmpleadosPage() {
   };
 
   return (
-    // ... (Tu JSX sin cambios)
-    <div className="p-6 space-y-4">
-      <header className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <SidebarTrigger />
-          <h1 className="text-2xl font-bold">Malla de Empleados</h1>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="text-sm">Año:</label>
-          <input
-            type="number"
-            value={year}
-            onChange={(e) => setYear(Number(e.target.value))}
-            className="border px-2 rounded w-24"
-          />
-        </div>
-      </header>
+    <div className="p-6 space-y-6">
+      {/* Header */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Calendar className="h-5 w-5" />
+            Malla de Empleados - {year}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium">Año:</label>
+              <input
+                type="number"
+                value={year}
+                onChange={(e) => setYear(Number(e.target.value))}
+                className="border px-2 py-1 rounded w-24"
+              />
+            </div>
+            <Separator orientation="vertical" className="h-6" />
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              <label className="text-sm">Empleados:</label>
+              <input
+                type="number"
+                value={countNumber}
+                onChange={(e) =>
+                  setCountNumber(
+                    e.target.value === "" ? "" : Number(e.target.value)
+                  )
+                }
+                className="border px-2 py-1 rounded w-20"
+                placeholder="9"
+                min="1"
+                max="50"
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
+      <Separator />
+
+      {/* File Upload */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Upload className="h-5 w-5" />
+            Cargar Archivo Excel
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-4">
+            <Input type="file" accept=".xlsx,.xls" onChange={onFile} />
+            {fileName && (
+              <Badge variant="secondary" className="flex items-center gap-1">
+                <FileSpreadsheet className="h-3 w-3" />
+                {fileName}
+              </Badge>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Progress */}
       {showProgress && (
-        <div className="mb-4">
-          <Progress value={progress} className="w-full" />
-          <p className="text-sm text-center mt-2">
-            Guardando mes... {progress}%
-          </p>
-        </div>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span>Guardando mes...</span>
+                <span>{progress}%</span>
+              </div>
+              <Progress value={progress} className="w-full" />
+            </div>
+          </CardContent>
+        </Card>
       )}
 
-      <div className="flex flex-wrap gap-4 items-center">
-        <label className="flex items-center gap-2">
-          <Input type="file" accept=".xlsx,.xls" onChange={onFile} />
-          {fileName && (
-            <span className="text-xs text-green-600">
-              ✅ Excel cargado: {fileName}
-            </span>
-          )}
-        </label>
-        <div>
-          <label>Mes:</label>
-          <select
-            value={mesSeleccionado}
-            onChange={(e) => buildPreviewForMonth(Number(e.target.value))}
-            className="border px-2 rounded ml-2"
-            disabled={!workbook}
-          >
-            {MONTH_NAMES.map((m, i) => (
-              <option key={m} value={i}>
-                {m}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="text-sm">Empleados:</label>
-          <input
-            type="number"
-            value={countNumber}
-            onChange={(e) =>
-              setCountNumber(
-                e.target.value === "" ? "" : Number(e.target.value)
-              )
-            }
-            className="border px-2 rounded w-20"
-            placeholder="9"
-            min="1"
-            max="50"
-          />
-        </div>
+      {/* Month Selection for Viewing */}
+      {workbook && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Calendar className="h-5 w-5" />
+              Mes para ver
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-4 gap-2 max-w-lg">
+              {MONTH_NAMES.map((month, index) => (
+                <Button
+                  key={index}
+                  type="button"
+                  variant={mesSeleccionado === index ? "default" : "outline"}
+                  size="sm"
+                  className={`text-xs h-9 w-full font-medium ${
+                    mesSeleccionado === index
+                      ? "bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
+                      : "hover:bg-gray-50 border-gray-300"
+                  }`}
+                  onClick={() => buildPreviewForMonth(index)}
+                  disabled={processing}
+                >
+                  {month.slice(0, 3)}
+                </Button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-        <div className="flex items-center gap-2">
-          <Button
-            onClick={() => saveMonth(mesSeleccionado)}
-            disabled={processing || previewRows.length === 0}
-          >
-            Guardar mes
-          </Button>
-          <Button
-            onClick={() => saveAllMonths()}
-            disabled={processing || !workbook}
-          >
-            Guardar todos los meses
-          </Button>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="destructive" disabled={processing}>
-                Eliminar TODO
+      {/* Month Selection for Saving */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Save className="h-5 w-5" />
+            Seleccionar meses para guardar
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-4 gap-2 max-w-lg">
+            {MONTH_NAMES.map((month, index) => (
+              <Button
+                key={index}
+                type="button"
+                variant={selectedMonths.includes(index) ? "default" : "outline"}
+                size="sm"
+                className={`text-xs h-9 w-full font-medium ${
+                  selectedMonths.includes(index)
+                    ? "bg-green-600 hover:bg-green-700 text-white shadow-sm"
+                    : "hover:bg-gray-50 border-gray-300"
+                }`}
+                onClick={() => {
+                  if (selectedMonths.includes(index)) {
+                    setSelectedMonths((prev) =>
+                      prev.filter((m) => m !== index)
+                    );
+                  } else {
+                    setSelectedMonths((prev) => [...prev, index]);
+                  }
+                }}
+                disabled={processing}
+              >
+                {month.slice(0, 3)}
               </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Esta acción eliminará TODAS las jornadas creadas, TODA la
-                  malla guardada y el archivo Excel cargado. Esta acción no se
-                  puede deshacer.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                <AlertDialogAction onClick={eliminarTodo}>
-                  Sí, eliminar TODO
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
-      </div>
+            ))}
+          </div>
+          {selectedMonths.length > 0 && (
+            <Badge variant="outline" className="mt-2">
+              {selectedMonths.length} mes
+              {selectedMonths.length !== 1 ? "es" : ""} seleccionado
+              {selectedMonths.length !== 1 ? "s" : ""}
+            </Badge>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Action Buttons */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CheckCircle className="h-5 w-5" />
+            Acciones
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={() => saveSelectedMonths()}
+              disabled={processing || !workbook || selectedMonths.length === 0}
+            >
+              <Save className="h-4 w-4 mr-2" />
+              Guardar meses seleccionados ({selectedMonths.length})
+            </Button>
+            <Button
+              onClick={() => saveAllMonths()}
+              disabled={processing || !workbook}
+            >
+              <Save className="h-4 w-4 mr-2" />
+              Guardar todos los meses
+            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" disabled={processing}>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Eliminar TODO
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Esta acción eliminará TODAS las jornadas creadas, TODA la
+                    malla guardada y el archivo Excel cargado. Esta acción no se
+                    puede deshacer.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction onClick={eliminarTodo}>
+                    Sí, eliminar TODO
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Message Dialog */}
       <AlertDialog open={messageDialogOpen} onOpenChange={setMessageDialogOpen}>
@@ -740,8 +1000,9 @@ export default function MallaEmpleadosPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <div>
-        <p className="text-sm text-muted-foreground">Días en mes: {diasMes}</p>
+      {/* Days in Month */}
+      <div className="text-sm text-muted-foreground">
+        Días en mes: {diasMes}
       </div>
 
       {/* Preview table (scroll) */}
@@ -770,9 +1031,9 @@ export default function MallaEmpleadosPage() {
                 </td>
                 <td className="p-2">
                   {row.uid ? (
-                    <span className="text-green-600">OK</span>
+                    <Badge variant="default">OK</Badge>
                   ) : (
-                    <span className="text-red-600">Sin usuario</span>
+                    <Badge variant="destructive">Sin usuario</Badge>
                   )}
                 </td>
                 {row.cells.slice(0, diasMes).map((c) => (
@@ -789,13 +1050,6 @@ export default function MallaEmpleadosPage() {
                     <div className="flex gap-2">
                       <Button
                         size="sm"
-                        onClick={() => saveRow(row.idx)}
-                        disabled={processing}
-                      >
-                        Guardar Cambios
-                      </Button>
-                      <Button
-                        size="sm"
                         variant="outline"
                         onClick={() =>
                           setPreviewRows((prev) =>
@@ -806,6 +1060,13 @@ export default function MallaEmpleadosPage() {
                         }
                       >
                         Confirmar
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => saveRow(row.idx)}
+                      >
+                        Guardar Día
                       </Button>
                     </div>
                   ) : (

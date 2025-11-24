@@ -8,7 +8,7 @@ import {
   EmpleadoService,
 } from "@/services/usuariosService";
 
-import { Edit, Trash2, FileSpreadsheet, Download, LogOut } from "lucide-react";
+import { Edit, Trash2, FileSpreadsheet, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -47,12 +47,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { CheckCircle2Icon, AlertCircleIcon, InfoIcon } from "lucide-react";
 
-import {
-  getAuth,
-  fetchSignInMethodsForEmail,
-  signInWithEmailAndPassword,
-  signOut,
-} from "firebase/auth";
+import { getAuth, fetchSignInMethodsForEmail } from "firebase/auth";
 
 export default function UsuariosTable() {
   const normalizeRol = (rol: string): Empleado["rol"] => {
@@ -65,10 +60,12 @@ export default function UsuariosTable() {
   const [empleados, setEmpleados] = React.useState<Empleado[]>([]);
   const [open, setOpen] = React.useState(false);
   const [openEdit, setOpenEdit] = React.useState(false);
-  const [nuevo, setNuevo] = React.useState<Partial<Empleado>>({
+  const [nuevo, setNuevo] = React.useState<
+    Partial<Empleado & { salarioBaseMensual: number | undefined }>
+  >({
     rol: "empleado",
     empresa: "NETCOL",
-    salarioBaseMensual: 0,
+    salarioBaseMensual: undefined,
   });
   const [editando, setEditando] = React.useState<Empleado | null>(null);
   const [search, setSearch] = React.useState("");
@@ -108,10 +105,8 @@ export default function UsuariosTable() {
       return;
     }
 
-    if (
-      typeof nuevo.salarioBaseMensual !== "number" ||
-      nuevo.salarioBaseMensual <= 0
-    ) {
+    const salario = nuevo.salarioBaseMensual;
+    if (!salario || salario <= 0) {
       setAlertDialogData({
         tipo: "warning",
         titulo: "Salario inválido",
@@ -158,7 +153,7 @@ export default function UsuariosTable() {
       });
 
       setOpen(false);
-      setNuevo({ rol: "empleado", empresa: "NETCOL", salarioBaseMensual: 0 });
+      setNuevo({ rol: "empleado", empresa: "NETCOL" });
       setEmpleados(await EmpleadoService.listar());
     } catch (error: any) {
       console.error(error);
@@ -576,25 +571,6 @@ export default function UsuariosTable() {
     XLSX.writeFile(workbook, "Empleados.xlsx");
   };
 
-  // Logout function
-  const handleLogout = async () => {
-    try {
-      await signOut(getAuth());
-      setAlertDialogData({
-        tipo: "success",
-        titulo: "Sesión cerrada",
-        descripcion: "Has cerrado sesión correctamente.",
-      });
-    } catch (error: any) {
-      console.error("Error al cerrar sesión:", error);
-      setAlertDialogData({
-        tipo: "warning",
-        titulo: "Error al cerrar sesión",
-        descripcion: error.message || "Ocurrió un error desconocido.",
-      });
-    }
-  };
-
   // Filtrado
   const filtrados = empleados.filter((e) => {
     const coincideNombre = e.nombre
@@ -630,10 +606,6 @@ export default function UsuariosTable() {
           <Button onClick={handleExportExcel}>
             <Download className="w-4 h-4 mr-1" />
             Exportar
-          </Button>
-          <Button onClick={handleLogout} variant="outline">
-            <LogOut className="w-4 h-4 mr-1" />
-            Cerrar Sesión
           </Button>
         </div>
       </div>
@@ -747,12 +719,12 @@ export default function UsuariosTable() {
               type="number"
               inputMode="numeric"
               placeholder="Salario"
-              value={nuevo.salarioBaseMensual}
+              value={nuevo.salarioBaseMensual ?? ""}
               onChange={(e) =>
                 setNuevo({
                   ...nuevo,
                   salarioBaseMensual:
-                    e.target.value === "" ? 0 : Number(e.target.value),
+                    e.target.value === "" ? undefined : Number(e.target.value),
                 })
               }
             />

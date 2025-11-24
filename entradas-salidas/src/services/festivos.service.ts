@@ -37,3 +37,15 @@ export async function esDominicalOFestivo(fechaISO: string): Promise<boolean> {
     esDomingo || esFestivoColombia(fechaISO) || manuales.includes(fechaISO)
   );
 }
+
+export async function hayFestivosEnAnio(anio: number): Promise<boolean> {
+  const manuales = await getFestivosManuales();
+  return manuales.some((fecha) => fecha.startsWith(`${anio}-`));
+}
+
+export async function cachearFestivosAnio(anio: number) {
+  // This function would cache holidays for the year, but since we're using date-holidays,
+  // it might not need implementation if holidays are computed on the fly.
+  // For now, just return a resolved promise.
+  return Promise.resolve();
+}

@@ -59,7 +59,18 @@ export async function getResumenNomina(opts: {
       nombre: nombres[j.userId] ?? j.userId,
       hNormales: 0,
       hExtras: 0,
+      hExtrasDiurnas: 0,
+      hExtrasNocturnas: 0,
+      hDominicales: 0,
       recargosH: 0,
+      recargoNocturnoOrdinario: 0,
+      recargoFestivoDiurno: 0,
+      recargoFestivoNocturno: 0,
+      extrasDiurnas: 0,
+      extrasNocturnas: 0,
+      extrasDiurnasDominical: 0,
+      extrasNocturnasDominical: 0,
+      totalHoras: 0,
       total$: 0,
     };
 
@@ -69,11 +80,16 @@ export async function getResumenNomina(opts: {
       (j.extrasNocturnas || 0) +
       (j.extrasDiurnasDominical || 0) +
       (j.extrasNocturnasDominical || 0);
+    row.hExtrasDiurnas += j.extrasDiurnas || 0;
+    row.hExtrasNocturnas += j.extrasNocturnas || 0;
+    row.hDominicales +=
+      (j.extrasDiurnasDominical || 0) + (j.extrasNocturnasDominical || 0);
 
     row.recargosH +=
       (j.recargoNocturnoOrdinario || 0) +
       (j.recargoFestivoDiurno || 0) +
       (j.recargoFestivoNocturno || 0);
+    row.recargoNocturnoOrdinario += j.recargoNocturnoOrdinario || 0;
 
     row.total$ += j.valorTotalDia || 0;
 

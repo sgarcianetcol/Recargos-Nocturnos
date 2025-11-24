@@ -168,14 +168,15 @@ export default function NominaResumen() {
         const empleado = empleados[j.userId];
         const salarioBase = empleado?.salarioBaseMensual ?? 0;
         const valorHora = salarioBase ? salarioBase / 220 : 0;
+        const recargosDesactivados = empleado?.recargosActivos === false;
 
         let r = map.get(j.userId);
         if (!r) {
           r = {
             userId: j.userId,
             nombre: empleado?.nombre ?? nombres[j.userId] ?? j.userId,
-            salarioBaseMensual: salarioBase,
-            valorHora,
+            salarioBaseMensual: recargosDesactivados ? 0 : salarioBase,
+            valorHora: recargosDesactivados ? 0 : valorHora,
             hNormales: 0,
             hExtras: 0,
             hExtrasDiurnas: 0,
@@ -183,36 +184,95 @@ export default function NominaResumen() {
             hDominicales: 0,
             recargosH: 0,
             total$: 0,
+            recargoNocturnoOrdinario: 0,
+            recargoFestivoDiurno: 0,
+            recargoFestivoNocturno: 0,
+            extrasDiurnas: 0,
+            extrasNocturnas: 0,
+            extrasDiurnasDominical: 0,
+            extrasNocturnasDominical: 0,
+            totalHoras: 0,
           };
           map.set(j.userId, r);
         }
 
-        r.hNormales += j.horasNormales ?? 0;
+        r.hNormales += isNaN(j.horasNormales) ? 0 : j.horasNormales ?? 0;
         r.hExtras +=
-          (j.extrasDiurnas ?? 0) +
-          (j.extrasNocturnas ?? 0) +
-          (j.extrasDiurnasDominical ?? 0) +
-          (j.extrasNocturnasDominical ?? 0);
+          (isNaN(j.extrasDiurnas) ? 0 : j.extrasDiurnas ?? 0) +
+          (isNaN(j.extrasNocturnas) ? 0 : j.extrasNocturnas ?? 0) +
+          (isNaN(j.extrasDiurnasDominical)
+            ? 0
+            : j.extrasDiurnasDominical ?? 0) +
+          (isNaN(j.extrasNocturnasDominical)
+            ? 0
+            : j.extrasNocturnasDominical ?? 0);
 
         r.hExtrasDiurnas =
           (r.hExtrasDiurnas ?? 0) +
-          (j.extrasDiurnas ?? 0) +
-          (j.extrasDiurnasDominical ?? 0);
+          (isNaN(j.extrasDiurnas) ? 0 : j.extrasDiurnas ?? 0) +
+          (isNaN(j.extrasDiurnasDominical) ? 0 : j.extrasDiurnasDominical ?? 0);
         r.hExtrasNocturnas =
           (r.hExtrasNocturnas ?? 0) +
-          (j.extrasNocturnas ?? 0) +
-          (j.extrasNocturnasDominical ?? 0);
+          (isNaN(j.extrasNocturnas) ? 0 : j.extrasNocturnas ?? 0) +
+          (isNaN(j.extrasNocturnasDominical)
+            ? 0
+            : j.extrasNocturnasDominical ?? 0);
         r.hDominicales =
           (r.hDominicales ?? 0) +
-          (j.extrasDiurnasDominical ?? 0) +
-          (j.extrasNocturnasDominical ?? 0);
+          (isNaN(j.extrasDiurnasDominical)
+            ? 0
+            : j.extrasDiurnasDominical ?? 0) +
+          (isNaN(j.extrasNocturnasDominical)
+            ? 0
+            : j.extrasNocturnasDominical ?? 0);
 
         r.recargosH +=
-          (j.recargoNocturnoOrdinario ?? 0) +
-          (j.recargoFestivoDiurno ?? 0) +
-          (j.recargoFestivoNocturno ?? 0);
+          (isNaN(j.recargoNocturnoOrdinario)
+            ? 0
+            : j.recargoNocturnoOrdinario ?? 0) +
+          (isNaN(j.recargoFestivoDiurno) ? 0 : j.recargoFestivoDiurno ?? 0) +
+          (isNaN(j.recargoFestivoNocturno) ? 0 : j.recargoFestivoNocturno ?? 0);
 
-        r.total$ += j.valorTotalDia ?? 0;
+        r.recargoNocturnoOrdinario += isNaN(j.recargoNocturnoOrdinario)
+          ? 0
+          : j.recargoNocturnoOrdinario ?? 0;
+        r.recargoFestivoDiurno += isNaN(j.recargoFestivoDiurno)
+          ? 0
+          : j.recargoFestivoDiurno ?? 0;
+        r.recargoFestivoNocturno += isNaN(j.recargoFestivoNocturno)
+          ? 0
+          : j.recargoFestivoNocturno ?? 0;
+        r.extrasDiurnas += isNaN(j.extrasDiurnas) ? 0 : j.extrasDiurnas ?? 0;
+        r.extrasNocturnas += isNaN(j.extrasNocturnas)
+          ? 0
+          : j.extrasNocturnas ?? 0;
+        r.extrasDiurnasDominical += isNaN(j.extrasDiurnasDominical)
+          ? 0
+          : j.extrasDiurnasDominical ?? 0;
+        r.extrasNocturnasDominical += isNaN(j.extrasNocturnasDominical)
+          ? 0
+          : j.extrasNocturnasDominical ?? 0;
+
+        r.total$ += recargosDesactivados ? 0 : (isNaN(j.valorTotalDia) ? 0 : j.valorTotalDia ?? 0);
+        r.totalHoras += Number(j.totalHoras) || 0;
+
+        // For employees with recargos deactivated, set all payment fields to 0 except totalHoras
+        if (recargosDesactivados) {
+          r.hNormales = 0;
+          r.hExtras = 0;
+          r.hExtrasDiurnas = 0;
+          r.hExtrasNocturnas = 0;
+          r.hDominicales = 0;
+          r.recargosH = 0;
+          r.recargoNocturnoOrdinario = 0;
+          r.recargoFestivoDiurno = 0;
+          r.recargoFestivoNocturno = 0;
+          r.extrasDiurnas = 0;
+          r.extrasNocturnas = 0;
+          r.extrasDiurnasDominical = 0;
+          r.extrasNocturnasDominical = 0;
+          r.total$ = 0;
+        }
       }
 
       const rowsFinal = [...map.values()];
@@ -275,6 +335,7 @@ export default function NominaResumen() {
         FECHA: new Date().toISOString().split("T")[0],
         SALARIO: r.salarioBaseMensual ?? 0,
         "HORA ORDINARIA (NO MODIFICAR)": r.hNormales ?? 0,
+        "TOTAL HORAS": r.totalHoras ?? 0,
         "CANTIDAD HORA EXTRA DIURNA": r.hExtrasDiurnas ?? 0,
         "CANTIDAD HORA EXTRA NOCTURNA": r.hExtrasNocturnas ?? 0,
         "CANTIDAD HORA EXTRA DIURNA FESTIVA": 0,
@@ -516,6 +577,22 @@ export default function NominaResumen() {
         </Button>
       </div>
 
+      <p className="text-xs text-muted-foreground leading-4">
+        <span className="font-semibold">RN</span>: Recargo Nocturno &nbsp; |
+        &nbsp;
+        <span className="font-semibold">RFD</span>: Recargo Festivo Diurno
+        &nbsp; | &nbsp;
+        <span className="font-semibold">RFN</span>: Recargo Festivo Nocturno
+        &nbsp; | &nbsp;
+        <span className="font-semibold">ED</span>: Extras Diurnas &nbsp; |
+        &nbsp;
+        <span className="font-semibold">EN</span>: Extras Nocturnas &nbsp; |
+        &nbsp;
+        <span className="font-semibold">EDD</span>: Extras Diurnas Dominical
+        &nbsp; | &nbsp;
+        <span className="font-semibold">END</span>: Extras Nocturnas Dominical
+      </p>
+
       <div className="border rounded-md overflow-hidden relative">
         {loading && (
           <div className="absolute inset-0 bg-white/50 flex justify-center items-center z-10">
@@ -529,11 +606,14 @@ export default function NominaResumen() {
               <TableHead>Empleado</TableHead>
               <TableHead className="text-right">Salario Base</TableHead>
               <TableHead className="text-right">Valor Hora</TableHead>
-              <TableHead className="text-right">H. Normales</TableHead>
-              <TableHead className="text-right">H. Extra Diurnas</TableHead>
-              <TableHead className="text-right">H. Extra Nocturnas</TableHead>
-              <TableHead className="text-right">H. Dominicales</TableHead>
-              <TableHead className="text-right">Recargos (h)</TableHead>
+              <TableHead className="text-right">Total Horas</TableHead>
+              <TableHead className="text-right">RN</TableHead>
+              <TableHead className="text-right">RFD</TableHead>
+              <TableHead className="text-right">RFN</TableHead>
+              <TableHead className="text-right">ED</TableHead>
+              <TableHead className="text-right">EN</TableHead>
+              <TableHead className="text-right">EDD</TableHead>
+              <TableHead className="text-right">END</TableHead>
               <TableHead className="text-right">Total Neto</TableHead>
               <TableHead></TableHead>
             </TableRow>
@@ -550,19 +630,28 @@ export default function NominaResumen() {
                   {money(r.valorHora ?? 0)}
                 </TableCell>
                 <TableCell className="text-right">
-                  {formatHoras(r.hNormales)}
+                  {formatHoras(r.totalHoras)}
                 </TableCell>
                 <TableCell className="text-right">
-                  {formatHoras(r.hExtrasDiurnas)}
+                  {formatHoras(r.recargoNocturnoOrdinario)}
                 </TableCell>
                 <TableCell className="text-right">
-                  {formatHoras(r.hExtrasNocturnas)}
+                  {formatHoras(r.recargoFestivoDiurno)}
                 </TableCell>
                 <TableCell className="text-right">
-                  {formatHoras(r.hDominicales)}
+                  {formatHoras(r.recargoFestivoNocturno)}
                 </TableCell>
                 <TableCell className="text-right">
-                  {formatHoras(r.recargosH)}
+                  {formatHoras(r.extrasDiurnas)}
+                </TableCell>
+                <TableCell className="text-right">
+                  {formatHoras(r.extrasNocturnas)}
+                </TableCell>
+                <TableCell className="text-right">
+                  {formatHoras(r.extrasDiurnasDominical)}
+                </TableCell>
+                <TableCell className="text-right">
+                  {formatHoras(r.extrasNocturnasDominical)}
                 </TableCell>
                 <TableCell className="text-right font-semibold text-blue-700">
                   {money(r.total$ ?? 0)}
@@ -585,7 +674,7 @@ export default function NominaResumen() {
             {filtrados.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={10}
+                  colSpan={13}
                   className="text-center py-10 text-muted-foreground"
                 >
                   Sin resultados para este periodo/filtros.
@@ -595,12 +684,6 @@ export default function NominaResumen() {
           </TableBody>
         </Table>
       </div>
-
-      <p className="text-xs text-muted-foreground">
-        *H. Normales = sumatoria horas base. *H. Extras = todas las horas extra
-        (diurna/nocturna/dominical). *Recargos = horas normales con recargo
-        (nocturnas/festivas/dominicales).
-      </p>
 
       <Dialog
         open={!!detalleEmpleado}

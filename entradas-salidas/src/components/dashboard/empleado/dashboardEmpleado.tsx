@@ -17,7 +17,11 @@ import { calcularDiaBasico } from "@/services/calculoBasico.service";
 import { esDominicalOFestivo } from "@/services/festivos.service";
 import type { Empleado } from "@/models/usuarios.model";
 
-export default function DashboardEmpleado() {
+export default function DashboardEmpleado({
+  usuarioId,
+}: {
+  usuarioId: string;
+}) {
   // 🔹 Usuario autenticado
   const [user, setUser] = useState<User | null>(null);
 
@@ -125,6 +129,13 @@ export default function DashboardEmpleado() {
           const fechaStr = fecha.toISOString().split("T")[0];
           const esDF = await esDominicalOFestivo(fechaStr);
 
+          console.log("🟦 Iniciando cálculo en dashboardEmpleado...");
+          console.log("➡ emp.salarioBaseMensual:", emp.salarioBaseMensual);
+          console.log("➡ fechaStr:", fechaStr);
+          console.log("➡ trn.horaEntrada:", trn.horaEntrada);
+          console.log("➡ trn.horaSalida:", trn.horaSalida);
+          console.log("➡ esDF:", esDF);
+
           const calc = calcularDiaBasico(
             emp.salarioBaseMensual,
             nominaCfg,
@@ -135,8 +146,11 @@ export default function DashboardEmpleado() {
               horaEntrada: trn.horaEntrada,
               horaSalida: trn.horaSalida,
               esDominicalFestivo: esDF,
+              recargosActivos: true,
             }
           );
+
+          console.log("🧮 Resultado del cálculo en dashboardEmpleado:", calc);
 
           setPreview({
             empleado: emp,
@@ -146,6 +160,8 @@ export default function DashboardEmpleado() {
             horas: calc.horas,
             valores: calc.valores,
           });
+
+          console.log("✅ Preview actualizado en dashboardEmpleado");
         }
       }
       setLoading(false);
@@ -208,9 +224,6 @@ export default function DashboardEmpleado() {
                 {preview.turno.horaSalida})
               </li>
               <li>
-                <b>Tarifa hora:</b> ${preview.tarifa.toLocaleString("es-CO")}
-              </li>
-              <li>
                 <b>Horas base/día:</b> {rules?.baseDailyHours}
               </li>
             </ul>
@@ -223,8 +236,11 @@ export default function DashboardEmpleado() {
             </h2>
             <div className="text-3xl font-bold text-indigo-800">
               $
-              {preview?.valores?.["Valor Total Día"]?.toLocaleString("es-CO") ??
-                "0"}
+              {isNaN(preview?.valores?.["Valor Total Día"])
+                ? "0"
+                : preview?.valores?.["Valor Total Día"]?.toLocaleString(
+                    "es-CO"
+                  ) ?? "0"}
             </div>
 
             <p className="text-xs mt-1 text-indigo-600 text-center">
@@ -237,12 +253,14 @@ export default function DashboardEmpleado() {
             <h3 className="font-semibold mb-2 text-gray-700">Horas</h3>
             <table className="w-full text-sm">
               <tbody className="[&>tr>td]:py-1">
-                {Object.entries(preview.horas).map(([k, v]) => (
-                  <tr key={k}>
-                    <td>{k}</td>
-                    <td className="text-right">{String(v)}</td>
-                  </tr>
-                ))}
+                {Object.entries(preview.horas)
+                  .filter(([k]) => k !== "Hora laboral ordinaria")
+                  .map(([k, v]) => (
+                    <tr key={k}>
+                      <td>{k}</td>
+                      <td className="text-right">{String(v)}</td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
           </section>
@@ -256,7 +274,10 @@ export default function DashboardEmpleado() {
                   <tr key={k}>
                     <td>{k}</td>
                     <td className="text-right">
-                      ${Number(v).toLocaleString("es-CO")}
+                      $
+                      {isNaN(Number(v))
+                        ? "0"
+                        : Number(v).toLocaleString("es-CO")}
                     </td>
                   </tr>
                 ))}

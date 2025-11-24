@@ -113,42 +113,38 @@ export function calcularDiaBasico(
   // --- VALORES ---
   const tarifa = salarioBaseMensual / cfgNomina.horasLaboralesMes;
   const valores = {
-    "Valor Hora laboral ordinaria": horas["Hora laboral ordinaria"] * tarifa,
     "Valor Recargo Nocturno Ordinario":
       horas["Recargo Nocturno Ordinario"] *
       tarifa *
-      (turno.recargosActivos
-        ? recargos.fixedRecargoValue ?? recargos.recargo_nocturno_ordinario
-        : 0),
+      recargos.recargo_nocturno_ordinario,
     "Valor Recargo Festivo Diurno":
       horas["Recargo Festivo Diurno"] *
       tarifa *
-      (turno.recargosActivos ? recargos.recargo_festivo_diurno : 0),
+      recargos.recargo_festivo_diurno,
     "Valor Recargo Festivo Nocturno":
       horas["Recargo Festivo Nocturno"] *
       tarifa *
-      (turno.recargosActivos ? recargos.recargo_festivo_nocturno : 0),
+      recargos.recargo_festivo_nocturno,
     "Valor Extras Diurnas":
       horas["Extras Diurnas"] *
       tarifa *
-      (turno.recargosActivos ? 1 + recargos.extra_diurna : 1),
+      (turno.recargosActivos ? recargos.extra_diurna : 1),
     "Valor Extras Nocturnas":
       horas["Extras Nocturnas"] *
       tarifa *
-      (turno.recargosActivos ? 1 + recargos.extra_nocturna : 1),
+      (turno.recargosActivos ? recargos.extra_nocturna : 1),
     "Valor Extras Diurnas Dominical":
       horas["Extras Diurnas Dominical"] *
       tarifa *
-      (turno.recargosActivos ? 1 + recargos.extra_diurna_dominical : 1),
+      (turno.recargosActivos ? recargos.extra_diurna_dominical : 1),
     "Valor Extras Nocturnas Dominical":
       horas["Extras Nocturnas Dominical"] *
       tarifa *
-      (turno.recargosActivos ? 1 + recargos.extra_nocturna_dominical : 1),
+      (turno.recargosActivos ? recargos.extra_nocturna_dominical : 1),
     "Valor Total Día": 0,
   };
 
   valores["Valor Total Día"] =
-    valores["Valor Hora laboral ordinaria"] +
     valores["Valor Recargo Nocturno Ordinario"] +
     valores["Valor Recargo Festivo Diurno"] +
     valores["Valor Recargo Festivo Nocturno"] +

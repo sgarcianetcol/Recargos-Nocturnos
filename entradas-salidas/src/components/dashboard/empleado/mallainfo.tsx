@@ -1,239 +1,287 @@
 import React, { useState, useEffect } from "react";
-import { Calendar, Users, Info, Clock } from "lucide-react";
+import {
+  Calendar,
+  Users,
+  Info,
+  Clock,
+  DollarSign,
+  RefreshCw,
+} from "lucide-react";
 import { MallaService } from "@/services/malla.service";
 import { useAcl } from "@/hooks/useAcl";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TURNOS_PREDETERMINADOS } from "@/models/turnos.defaults";
+import { listarJornadasPorUsuarioRango } from "@/services/jornada.service";
+import { JornadaDoc } from "@/models/jornada.model";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { EmpleadoService } from "@/services/usuariosService";
+import type { Empleado } from "@/models/usuarios.model";
 
 export default function MallaInfo() {
   const { uid } = useAcl();
-  const [mallaMensual, setMallaMensual] = useState<any[]>([]);
+  const [mallaRango, setMallaRango] = useState<any[]>([]);
+  const [jornadasRango, setJornadasRango] = useState<JornadaDoc[]>([]);
   const [loading, setLoading] = useState(true);
-  const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
-  const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
+  const [refreshing, setRefreshing] = useState(false);
+  const [userData, setUserData] = useState<Empleado | null>(null);
+  const [desde, setDesde] = useState(() => {
+    const today = new Date();
+    const thirtyDaysAgo = new Date(today);
+    thirtyDaysAgo.setDate(today.getDate() - 30);
+    return thirtyDaysAgo.toISOString().split("T")[0];
+  });
+  const [hasta, setHasta] = useState(() => {
+    const today = new Date();
+    return today.toISOString().split("T")[0];
+  });
 
   useEffect(() => {
-    loadMallaMensual();
-  }, [uid, currentMonth, currentYear]);
+    loadUserData();
+    loadDataRango();
+  }, [uid, desde, hasta]);
 
-  const loadMallaMensual = async () => {
+  const loadUserData = async () => {
+    if (!uid) return;
+    try {
+      const user = await EmpleadoService.obtener(uid);
+      setUserData(user);
+    } catch (error) {
+      console.error("Error cargando datos del usuario:", error);
+    }
+  };
+
+  const loadDataRango = async () => {
     if (!uid) return setLoading(false);
 
     try {
-      const malla = await MallaService.getMallaMensual(
-        uid,
-        currentYear,
-        currentMonth
-      );
-      setMallaMensual(malla);
+      const [malla, jornadas] = await Promise.all([
+        MallaService.getMallaRango(uid, desde, hasta),
+        listarJornadasPorUsuarioRango({
+          userId: uid,
+          desdeISO: desde,
+          hastaISO: hasta,
+        }),
+      ]);
+
+      setMallaRango(malla);
+      setJornadasRango(jornadas);
     } catch (error) {
-      console.error("Error cargando malla mensual:", error);
+      console.error("Error cargando datos del rango:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const getTurnoColor = (turno: string | null) => {
-    const colors: Record<string, string> = {
-      M8: "bg-blue-200 text-blue-900 dark:bg-blue-900 dark:text-blue-200",
-      T8: "bg-green-200 text-green-900 dark:bg-green-900 dark:text-green-200",
-      N8: "bg-purple-200 text-purple-900 dark:bg-purple-900 dark:text-purple-200",
-      D12: "bg-yellow-200 text-yellow-900 dark:bg-yellow-900 dark:text-yellow-200",
-      N12: "bg-indigo-200 text-indigo-900 dark:bg-indigo-900 dark:text-indigo-200",
-      D: "bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-200",
-    };
-    return (
-      colors[turno ?? ""] ??
-      "bg-gray-200 text-gray-900 dark:bg-gray-800 dark:text-gray-200"
+  const handleRefresh = async () => {
+    if (!uid) return;
+
+    setRefreshing(true);
+    try {
+      const [malla, jornadas] = await Promise.all([
+        MallaService.getMallaRango(uid, desde, hasta),
+        listarJornadasPorUsuarioRango({
+          userId: uid,
+          desdeISO: desde,
+          hastaISO: hasta,
+        }),
+      ]);
+
+      setMallaRango(malla);
+      setJornadasRango(jornadas);
+    } catch (error) {
+      console.error("Error actualizando datos:", error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const calcularEstadisticasRango = () => {
+    const totalPago = jornadasRango.reduce(
+      (sum, j) => sum + (isNaN(j.valorTotalDia) ? 0 : j.valorTotalDia),
+      0
     );
-  };
-
-  const calcularHorasPorTurno = () => {
-    const horas: Record<string, number> = {};
-
-    TURNOS_PREDETERMINADOS.forEach((turno) => {
-      horas[turno.id] = 0;
-    });
-
-    horas["D"] = 0;
-
-    mallaMensual.forEach((dia) => {
-      const turno = dia.turno;
-      if (!turno) return;
-
-      if (turno === "D") {
-        horas["D"] += 1;
-      } else {
-        const info = TURNOS_PREDETERMINADOS.find((t) => t.id === turno);
-        if (info) horas[turno] += info.duracionHoras;
-      }
-    });
-
-    return horas;
-  };
-
-  const calcularEstadisticas = () => {
-    const horas = calcularHorasPorTurno();
+    const totalHoras = jornadasRango.reduce(
+      (sum, j) => sum + (isNaN(j.totalHoras) ? 0 : j.totalHoras),
+      0
+    );
+    const diasTrabajados = jornadasRango.length;
+    const diasDescanso = mallaRango.filter((d) => d.turno === "D").length;
 
     return {
-      totalHoras: horas.M8 + horas.T8 + horas.N8 + horas.D12 + horas.N12,
-      diasTrabajados: mallaMensual.filter((d) => d.turno && d.turno !== "D")
-        .length,
-      diasDescanso: horas.D,
-      diasEnMalla: mallaMensual.length,
+      totalPago,
+      totalHoras,
+      diasTrabajados,
+      diasDescanso,
+      diasEnRango: mallaRango.length,
     };
   };
 
-  const stats = calcularEstadisticas();
+  const stats = calcularEstadisticasRango();
 
   if (loading) {
     return (
-      <div className="p-10 text-center text-xl">Cargando malla mensual...</div>
+      <div className="p-10 text-center text-xl">
+        Cargando datos del rango...
+      </div>
     );
   }
 
   return (
     <div className="min-h-screen p-6 bg-gradient-to-br from-blue-100 via-indigo-100 to-purple-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
       <div className="max-w-7xl mx-auto space-y-12">
+        {/* FILTROS DE FECHA */}
+        <Card className="rounded-2xl shadow-xl border dark:border-gray-700 bg-white dark:bg-gray-900">
+          <CardHeader>
+            <CardTitle className="text-center text-2xl font-bold text-gray-800 dark:text-gray-100">
+              Filtrar por Rango de Fechas
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <Label htmlFor="desde">Desde</Label>
+                <Input
+                  id="desde"
+                  type="date"
+                  value={desde}
+                  onChange={(e) => setDesde(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="hasta">Hasta</Label>
+                <Input
+                  id="hasta"
+                  type="date"
+                  value={hasta}
+                  onChange={(e) => setHasta(e.target.value)}
+                />
+              </div>
+              <div className="flex items-end">
+                <Button
+                  onClick={handleRefresh}
+                  disabled={refreshing}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  <RefreshCw
+                    className={`w-4 h-4 mr-2 ${
+                      refreshing ? "animate-spin" : ""
+                    }`}
+                  />
+                  {refreshing ? "Actualizando..." : "Actualizar"}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* ESTADÍSTICAS */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
           {[
             {
+              title: "Total a Pagar",
+              value: isNaN(stats.totalPago)
+                ? "$0"
+                : `$${stats.totalPago.toLocaleString()}`,
+              icon: DollarSign,
+              color: "from-green-500 to-green-700",
+            },
+            {
               title: "Total Horas",
-              value: `${stats.totalHoras}h`,
+              value: isNaN(stats.totalHoras)
+                ? "0h"
+                : `${stats.totalHoras.toFixed(1)}h`,
               icon: Clock,
               color: "from-blue-500 to-blue-700",
             },
             {
               title: "Días Trabajados",
-              value: stats.diasTrabajados,
+              value: stats.diasTrabajados.toString(),
               icon: Users,
-              color: "from-green-500 to-green-700",
+              color: "from-purple-500 to-purple-700",
             },
             {
               title: "Días de Descanso",
-              value: stats.diasDescanso,
+              value: stats.diasDescanso.toString(),
               icon: Info,
               color: "from-orange-500 to-orange-700",
             },
             {
-              title: "Días en Malla",
-              value: stats.diasEnMalla,
+              title: "Días en Rango",
+              value: stats.diasEnRango.toString(),
               icon: Calendar,
-              color: "from-purple-500 to-purple-700",
+              color: "from-indigo-500 to-indigo-700",
             },
-          ].map((item, i) => (
-            <Card
-              key={i}
-              className={`rounded-2xl bg-gradient-to-br ${item.color} text-black shadow-xl border-0 hover:scale-[1.02] transition-all`}
-            >
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-lg font-bold text-gray-900 dark:text-gray-100">
+          ]
+            .filter((item) => {
+              // Hide "Total a Pagar" for employees with recargos deactivated
+              return (
+                userData?.recargosActivos !== false ||
+                item.title !== "Total a Pagar"
+              );
+            })
+            .map((item, i) => {
+              const getValueClass = (value: string) => {
+                if (value.length > 15) return "text-lg";
+                if (value.length > 10) return "text-xl";
+                return "text-2xl";
+              };
+              return (
+                <Card
+                  key={i}
+                  className={`rounded-2xl bg-gradient-to-br ${item.color} text-black shadow-xl border-0 hover:scale-[1.02] transition-all min-h-[140px]`}
+                >
+                  <CardContent className="p-6 flex flex-col items-center justify-center text-center">
+                    <item.icon className="w-10 h-10 text-gray-900 dark:text-gray-100 opacity-90 mb-2" />
+                    <p className="text-sm font-bold text-gray-900 dark:text-gray-100 mb-1">
                       {item.title}
                     </p>
-                    <p className="text-7xl font-extrabold text-gray-900 dark:text-gray-100">
+                    <p
+                      className={`${getValueClass(
+                        item.value
+                      )} font-extrabold text-gray-900 dark:text-gray-100`}
+                    >
                       {item.value}
                     </p>
-                  </div>
-                  <item.icon className="w-12 h-12 text-gray-900 dark:text-gray-100 opacity-90" />
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                  </CardContent>
+                </Card>
+              );
+            })}
         </div>
 
-        {/* CALENDARIO SIMPLIFICADO */}
+        {/* LISTA DE JORNADAS */}
         <Card className="rounded-3xl shadow-xl border dark:border-gray-700 bg-white dark:bg-gray-900">
           <CardHeader>
             <CardTitle className="text-center text-3xl font-bold text-gray-800 dark:text-gray-100">
-              Calendario del Mes
+              Jornadas en el Rango ({jornadasRango.length})
             </CardTitle>
-
-            {/* 🔥 NUEVO: NAV MESES (flechas) */}
-            <div className="flex items-center justify-between mt-4 px-4">
-              <button
-                onClick={() => {
-                  setCurrentMonth((prev) => (prev === 0 ? 11 : prev - 1));
-                  if (currentMonth === 0) setCurrentYear(currentYear - 1);
-                }}
-                className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-all"
-              >
-                ←
-              </button>
-
-              <h3 className="text-xl font-semibold capitalize">
-                {new Date(currentYear, currentMonth).toLocaleString("es-ES", {
-                  month: "long",
-                  year: "numeric",
-                })}
-              </h3>
-
-              <button
-                onClick={() => {
-                  setCurrentMonth((prev) => (prev === 11 ? 0 : prev + 1));
-                  if (currentMonth === 11) setCurrentYear(currentYear + 1);
-                }}
-                className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-all"
-              >
-                →
-              </button>
-            </div>
           </CardHeader>
-
           <CardContent className="p-6">
-            {/* Calendar Grid */}
-            <div
-              className="calendar-grid"
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(7, 1fr)",
-                gap: "8px",
-                width: "100%",
-              }}
-            >
-              {/* Días de la semana (DOM–SÁB) */}
-              {["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"].map((dia) => (
+            <div className="space-y-4">
+              {jornadasRango.map((jornada) => (
                 <div
-                  key={dia}
-                  className="text-center text-sm font-semibold text-gray-600 dark:text-gray-300 py-2"
+                  key={jornada.id}
+                  className="border border-gray-200 dark:border-gray-600 rounded-lg p-4"
                 >
-                  {dia}
-                </div>
-              ))}
-
-              {/* Espacios vacíos para alinear el mes */}
-              {(() => {
-                const emptySpaces = new Date(
-                  currentYear,
-                  currentMonth,
-                  1
-                ).getDay();
-                return Array.from({ length: emptySpaces }, (_, i) => (
-                  <div key={`empty-${i}`} className="h-20"></div>
-                ));
-              })()}
-
-              {/* Días de la malla */}
-              {mallaMensual.map((dia) => (
-                <div
-                  key={dia.dia}
-                  className="h-20 p-3 border border-gray-200 dark:border-gray-600 rounded-lg text-center flex flex-col justify-center bg-white dark:bg-gray-700 hover:shadow-md transition-all duration-200 hover:scale-[1.03]"
-                >
-                  <div className="font-bold text-lg text-gray-800 dark:text-gray-100 mb-1">
-                    {dia.dia}
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <p className="font-semibold">{jornada.fecha}</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-300">
+                        Turno: {jornada.turnoId} | Horas:{" "}
+                        {isNaN(jornada.totalHoras)
+                          ? "0.0"
+                          : jornada.totalHoras.toFixed(1)}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      {userData?.recargosActivos === false ? null : (
+                        <p className="font-bold text-green-600">
+                          ${jornada.valorTotalDia.toLocaleString()}
+                        </p>
+                      )}
+                    </div>
                   </div>
-
-                  {dia.turno && (
-                    <span
-                      className={`px-2 py-1 rounded-full text-xs font-bold ${getTurnoColor(
-                        dia.turno
-                      )}`}
-                    >
-                      {dia.turno}
-                    </span>
-                  )}
                 </div>
               ))}
             </div>

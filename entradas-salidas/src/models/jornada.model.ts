@@ -88,6 +88,16 @@ export interface NominaRow {
   bonificaciones?: number;
   deducciones?: number;
   neto?: number;
+
+  // Detailed breakdowns
+  recargoNocturnoOrdinario: number;
+  recargoFestivoDiurno: number;
+  recargoFestivoNocturno: number;
+  extrasDiurnas: number;
+  extrasNocturnas: number;
+  extrasDiurnasDominical: number;
+  extrasNocturnasDominical: number;
+  totalHoras: number;
 }
 
 // utils/time.ts (o al inicio del archivo)

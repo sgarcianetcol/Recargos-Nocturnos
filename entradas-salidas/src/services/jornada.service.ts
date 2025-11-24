@@ -47,7 +47,7 @@ export async function crearJornadaCalculada(opts: {
     ConfigNominaService.getRules(),
   ]);
 
-  if (!turno) throw new Error("Turno no encontrado");
+  if (!turno && turnoId !== "D") throw new Error("Turno no encontrado");
 
   const nominaCfg: NominaConfig = nominaCfgRaw ?? DEFAULT_NOMINA;
   const recargosCfg: RecargosConfig = recargosCfgRaw ?? DEFAULT_RECARGOS;
@@ -63,7 +63,9 @@ export async function crearJornadaCalculada(opts: {
         hour: "2-digit",
         minute: "2-digit",
       })
-    : turno.horaEntrada ?? "08:00";
+    : turnoId === "D"
+    ? "00:00"
+    : turno?.horaEntrada ?? "08:00";
 
   const horaSalidaCalc = jornadaReal?.horaSalida
     ? jornadaReal.horaSalida.toLocaleTimeString("es-CO", {
@@ -71,7 +73,22 @@ export async function crearJornadaCalculada(opts: {
         hour: "2-digit",
         minute: "2-digit",
       })
-    : turno.horaSalida ?? "17:00";
+    : turnoId === "D"
+    ? "00:00"
+    : turno?.horaSalida ?? "17:00";
+
+  // Calcular si cruza medianoche basado en horas calculadas
+  const cruzo = turnoId === "D" ? false : horaSalidaCalc <= horaEntradaCalc;
+
+  // Calcular horas trabajadas
+  const parseTime = (time: string): number => {
+    const [h, m] = time.split(":").map(Number);
+    return h * 60 + m;
+  };
+  const entradaMin = parseTime(horaEntradaCalc);
+  let salidaMin = parseTime(horaSalidaCalc);
+  if (cruzo) salidaMin += 24 * 60;
+  const horasTrabajadas = (salidaMin - entradaMin) / 60;
 
   const calc = calcularDiaBasico(
     empleado.salarioBaseMensual ?? 0,
@@ -83,7 +100,7 @@ export async function crearJornadaCalculada(opts: {
       horaEntrada: horaEntradaCalc,
       horaSalida: horaSalidaCalc,
       esDominicalFestivo: esDF,
-      recargosActivos: empleado.recargosActivos ?? true, // Use employee's recargos setting, default to true
+      recargosActivos: empleado.recargosActivos ?? true,
     }
   );
 
@@ -93,47 +110,146 @@ export async function crearJornadaCalculada(opts: {
     empresa: empleado.empresa,
     fecha,
     turnoId,
-    horaEntrada: turno.horaEntrada ?? "08:00",
-    horaSalida: turno.horaSalida ?? "17:00",
-    cruzoMedianoche: turno.horaSalida <= turno.horaEntrada,
+    horaEntrada: turnoId === "D" ? "00:00" : turno?.horaEntrada ?? "08:00",
+    horaSalida: turnoId === "D" ? "00:00" : turno?.horaSalida ?? "17:00",
+    cruzoMedianoche:
+      turnoId === "D"
+        ? false
+        : turno?.horaSalida && turno?.horaEntrada
+        ? turno.horaSalida <= turno.horaEntrada
+        : false,
     esDominicalFestivo: esDF,
     salarioBaseAplicado: empleado.salarioBaseMensual ?? 0,
     horasLaboralesMesAplicadas: nominaCfg.horasLaboralesMes ?? 0,
-    tarifaHoraAplicada: calc.tarifaHoraAplicada ?? 0,
-    rulesAplicadas: rules,
-    recargosAplicados: recargosCfg as unknown as Record<string, number>,
+    tarifaHoraAplicada: isNaN(calc.tarifaHoraAplicada)
+      ? 0
+      : calc.tarifaHoraAplicada ?? 0,
+    rulesAplicadas: turnoId === "D" ? DEFAULT_RULES : rules,
+    recargosAplicados:
+      turnoId === "D" ? {} : (recargosCfg as unknown as Record<string, number>),
 
     // HORAS
-    horasNormales: calc.horas?.["Hora laboral ordinaria"] ?? 0,
-    recargoNocturnoOrdinario: calc.horas?.["Recargo Nocturno Ordinario"] ?? 0,
-    recargoFestivoDiurno: calc.horas?.["Recargo Festivo Diurno"] ?? 0,
-    recargoFestivoNocturno: calc.horas?.["Recargo Festivo Nocturno"] ?? 0,
-    extrasDiurnas: calc.horas?.["Extras Diurnas"] ?? 0,
-    extrasNocturnas: calc.horas?.["Extras Nocturnas"] ?? 0,
-    extrasDiurnasDominical: calc.horas?.["Extras Diurnas Dominical"] ?? 0,
-    extrasNocturnasDominical: calc.horas?.["Extras Nocturnas Dominical"] ?? 0,
+    horasNormales:
+      turnoId === "D" ? 0 : isNaN(horasTrabajadas) ? 0 : horasTrabajadas,
+    recargoNocturnoOrdinario:
+      turnoId === "D"
+        ? 0
+        : isNaN(calc.horas?.["Recargo Nocturno Ordinario"])
+        ? 0
+        : calc.horas?.["Recargo Nocturno Ordinario"] ?? 0,
+    recargoFestivoDiurno:
+      turnoId === "D"
+        ? 0
+        : isNaN(calc.horas?.["Recargo Festivo Diurno"])
+        ? 0
+        : calc.horas?.["Recargo Festivo Diurno"] ?? 0,
+    recargoFestivoNocturno:
+      turnoId === "D"
+        ? 0
+        : isNaN(calc.horas?.["Recargo Festivo Nocturno"])
+        ? 0
+        : calc.horas?.["Recargo Festivo Nocturno"] ?? 0,
+    extrasDiurnas:
+      turnoId === "D"
+        ? 0
+        : isNaN(calc.horas?.["Extras Diurnas"])
+        ? 0
+        : calc.horas?.["Extras Diurnas"] ?? 0,
+    extrasNocturnas:
+      turnoId === "D"
+        ? 0
+        : isNaN(calc.horas?.["Extras Nocturnas"])
+        ? 0
+        : calc.horas?.["Extras Nocturnas"] ?? 0,
+    extrasDiurnasDominical:
+      turnoId === "D"
+        ? 0
+        : isNaN(calc.horas?.["Extras Diurnas Dominical"])
+        ? 0
+        : calc.horas?.["Extras Diurnas Dominical"] ?? 0,
+    extrasNocturnasDominical:
+      turnoId === "D"
+        ? 0
+        : isNaN(calc.horas?.["Extras Nocturnas Dominical"])
+        ? 0
+        : calc.horas?.["Extras Nocturnas Dominical"] ?? 0,
     horasExtras:
-      (calc.horas?.["Extras Diurnas"] ?? 0) +
-      (calc.horas?.["Extras Nocturnas"] ?? 0) +
-      (calc.horas?.["Extras Diurnas Dominical"] ?? 0) +
-      (calc.horas?.["Extras Nocturnas Dominical"] ?? 0),
-    totalHoras: calc.horas?.["Total Horas"] ?? 0,
+      turnoId === "D"
+        ? 0
+        : (isNaN(calc.horas?.["Extras Diurnas"])
+            ? 0
+            : calc.horas?.["Extras Diurnas"] ?? 0) +
+          (isNaN(calc.horas?.["Extras Nocturnas"])
+            ? 0
+            : calc.horas?.["Extras Nocturnas"] ?? 0) +
+          (isNaN(calc.horas?.["Extras Diurnas Dominical"])
+            ? 0
+            : calc.horas?.["Extras Diurnas Dominical"] ?? 0) +
+          (isNaN(calc.horas?.["Extras Nocturnas Dominical"])
+            ? 0
+            : calc.horas?.["Extras Nocturnas Dominical"] ?? 0),
+    totalHoras:
+      turnoId === "D"
+        ? 0
+        : isNaN(calc.horas?.["Total Horas"])
+        ? 0
+        : calc.horas?.["Total Horas"] ?? 0,
 
     // VALORES
-    valorHorasNormales: calc.valores?.["Valor Hora laboral ordinaria"] ?? 0,
+    valorHorasNormales:
+      turnoId === "D"
+        ? 0
+        : isNaN(calc.valores?.["Valor Hora laboral ordinaria"])
+        ? 0
+        : calc.valores?.["Valor Hora laboral ordinaria"] ?? 0,
     valorRecargoNocturnoOrdinario:
-      calc.valores?.["Valor Recargo Nocturno Ordinario"] ?? 0,
+      turnoId === "D"
+        ? 0
+        : isNaN(calc.valores?.["Valor Recargo Nocturno Ordinario"])
+        ? 0
+        : calc.valores?.["Valor Recargo Nocturno Ordinario"] ?? 0,
     valorRecargoFestivoDiurno:
-      calc.valores?.["Valor Recargo Festivo Diurno"] ?? 0,
+      turnoId === "D"
+        ? 0
+        : isNaN(calc.valores?.["Valor Recargo Festivo Diurno"])
+        ? 0
+        : calc.valores?.["Valor Recargo Festivo Diurno"] ?? 0,
     valorRecargoFestivoNocturno:
-      calc.valores?.["Valor Recargo Festivo Nocturno"] ?? 0,
-    valorExtrasDiurnas: calc.valores?.["Valor Extras Diurnas"] ?? 0,
-    valorExtrasNocturnas: calc.valores?.["Valor Extras Nocturnas"] ?? 0,
+      turnoId === "D"
+        ? 0
+        : isNaN(calc.valores?.["Valor Recargo Festivo Nocturno"])
+        ? 0
+        : calc.valores?.["Valor Recargo Festivo Nocturno"] ?? 0,
+    valorExtrasDiurnas:
+      turnoId === "D"
+        ? 0
+        : isNaN(calc.valores?.["Valor Extras Diurnas"])
+        ? 0
+        : calc.valores?.["Valor Extras Diurnas"] ?? 0,
+    valorExtrasNocturnas:
+      turnoId === "D"
+        ? 0
+        : isNaN(calc.valores?.["Valor Extras Nocturnas"])
+        ? 0
+        : calc.valores?.["Valor Extras Nocturnas"] ?? 0,
     valorExtrasDiurnasDominical:
-      calc.valores?.["Valor Extras Diurnas Dominical"] ?? 0,
+      turnoId === "D"
+        ? 0
+        : isNaN(calc.valores?.["Valor Extras Diurnas Dominical"])
+        ? 0
+        : calc.valores?.["Valor Extras Diurnas Dominical"] ?? 0,
     valorExtrasNocturnasDominical:
-      calc.valores?.["Valor Extras Nocturnas Dominical"] ?? 0,
-    valorTotalDia: calc.valores?.["Valor Total Día"] ?? 0,
+      turnoId === "D"
+        ? 0
+        : isNaN(calc.valores?.["Valor Extras Nocturnas Dominical"])
+        ? 0
+        : calc.valores?.["Valor Extras Nocturnas Dominical"] ?? 0,
+    valorTotalDia:
+      turnoId === "D"
+        ? 0
+        : isNaN(calc.valores?.["Valor Total Día"])
+        ? 0
+        : calc.valores?.["Valor Total Día"] ?? 0,
 
     creadoEn: serverTimestamp(),
     estado: "calculado",

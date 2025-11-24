@@ -2,7 +2,7 @@
 "use client";
 
 import * as React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   AlertDialog,
   AlertDialogTrigger,
@@ -110,16 +110,15 @@ export default function ConfiguracionAdmin() {
     {}
   );
 
-  // Cargar datos iniciales
-  useEffect(() => {
-    cargarTodosDatos();
-  }, []);
+  const mostrarMensaje = useCallback(
+    (tipo: "exito" | "error", texto: string) => {
+      setMensaje({ tipo, texto });
+      setTimeout(() => setMensaje(null), 5000);
+    },
+    []
+  );
 
-  const cargarTodosDatos = async () => {
-    await Promise.all([cargarUsuarios(), cargarFestivos(), cargarParametros()]);
-  };
-
-  const cargarUsuarios = async () => {
+  const cargarUsuarios = useCallback(async () => {
     try {
       setCargandoUsuarios(true);
       const u = await getUsuarios();
@@ -130,9 +129,9 @@ export default function ConfiguracionAdmin() {
     } finally {
       setCargandoUsuarios(false);
     }
-  };
+  }, [mostrarMensaje]);
 
-  const cargarFestivos = async () => {
+  const cargarFestivos = useCallback(async () => {
     try {
       const f = await getFestivosManuales();
       setFestivos(f || []);
@@ -140,9 +139,9 @@ export default function ConfiguracionAdmin() {
       console.error("Error cargarFestivos:", err);
       mostrarMensaje("error", "Error al cargar festivos");
     }
-  };
+  }, [mostrarMensaje]);
 
-  const cargarParametros = async () => {
+  const cargarParametros = useCallback(async () => {
     try {
       const p = await getParametros();
       setParametros((prev) => ({
@@ -156,12 +155,16 @@ export default function ConfiguracionAdmin() {
       console.error("Error cargarParametros:", err);
       mostrarMensaje("error", "Error al cargar parámetros");
     }
-  };
+  }, [mostrarMensaje]);
 
-  const mostrarMensaje = (tipo: "exito" | "error", texto: string) => {
-    setMensaje({ tipo, texto });
-    setTimeout(() => setMensaje(null), 5000);
-  };
+  const cargarTodosDatos = useCallback(async () => {
+    await Promise.all([cargarUsuarios(), cargarFestivos(), cargarParametros()]);
+  }, []);
+
+  // Cargar datos iniciales
+  useEffect(() => {
+    cargarTodosDatos();
+  }, [cargarTodosDatos]);
 
   // ============================================================================
   // USUARIOS - CRUD
@@ -257,9 +260,12 @@ export default function ConfiguracionAdmin() {
 
       setModalUsuarioAbierto(false);
       await cargarUsuarios();
-    } catch (err: any) {
+    } catch (err) {
       console.error("Error guardando usuario:", err);
-      mostrarMensaje("error", err.message || "Error al guardar usuario");
+      mostrarMensaje(
+        "error",
+        err instanceof Error ? err.message : "Error al guardar usuario"
+      );
     } finally {
       setGuardando(false);
     }
@@ -507,7 +513,7 @@ export default function ConfiguracionAdmin() {
                       ${u.salarioBaseMensual.toLocaleString()}
                     </td>
                     <td className="p-3 text-center">
-                      <RecargosButtonWithConfirm usuario={u as any} />
+                      <RecargosButtonWithConfirm usuario={u} />
                     </td>
                     <td className="p-3">
                       <div className="flex gap-2 justify-center">
@@ -648,7 +654,7 @@ export default function ConfiguracionAdmin() {
             <h3 className="font-medium mb-4">Porcentajes de Recargo (%)</h3>
 
             {Object.entries(parametros.recargos).map(([key, value]) => {
-              const inputValue = recargoInput[key] ?? (value * 100).toFixed(2);
+              const inputValue = recargoInput[key] ?? value.toFixed(2);
 
               return (
                 <div
@@ -668,8 +674,8 @@ export default function ConfiguracionAdmin() {
                       }
                     }}
                     onBlur={() => {
-                      // Convertimos a decimal y guardamos en contexto
-                      const num = parseFloat(recargoInput[key] ?? "0") / 100;
+                      // Guardamos el valor decimal directamente
+                      const num = parseFloat(recargoInput[key] ?? "0");
                       setParametros((prev) => ({
                         ...prev,
                         recargos: { ...prev.recargos, [key]: num },
@@ -677,7 +683,7 @@ export default function ConfiguracionAdmin() {
                       // Fijamos el input con 2 decimales
                       setRecargoInput((prev) => ({
                         ...prev,
-                        [key]: ((num ?? 0) * 100).toFixed(2),
+                        [key]: (num ?? 0).toFixed(2),
                       }));
                     }}
                   />

@@ -5,13 +5,18 @@ import {
   Timestamp,
   setDoc,
   collection,
+  collectionGroup,
   getDocs,
   query,
   where,
+  deleteDoc,
 } from "firebase/firestore";
 import { getDoc } from "firebase/firestore";
 import { EmpleadoService } from "@/services/usuariosService";
-import { crearJornadaCalculada } from "@/services/jornada.service";
+import {
+  crearJornadaCalculada,
+  eliminarJornada,
+} from "@/services/jornada.service";
 
 export interface PreviewCell {
   day: number;
@@ -63,6 +68,52 @@ export class MallaService {
       nombre: data.nombre,
     };
   }
+
+  static async getMallaRango(
+    userId: string,
+    fechaInicio: string,
+    fechaFin: string
+  ) {
+    const inicio = new Date(fechaInicio);
+    const fin = new Date(fechaFin);
+
+    const startYear = inicio.getFullYear();
+    const startMonth = inicio.getMonth();
+    const endYear = fin.getFullYear();
+    const endMonth = fin.getMonth();
+
+    const results: any[] = [];
+
+    for (let year = startYear; year <= endYear; year++) {
+      const monthStart = year === startYear ? startMonth : 0;
+      const monthEnd = year === endYear ? endMonth : 11;
+
+      for (let month = monthStart; month <= monthEnd; month++) {
+        const mm = String(month + 1).padStart(2, "0");
+        const monthId = `${year}_${mm}`;
+
+        const diasRef = collection(
+          db,
+          "usuarios",
+          userId,
+          "malla",
+          monthId,
+          "dias"
+        );
+        const snapshot = await getDocs(diasRef);
+
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          if (data.fecha >= fechaInicio && data.fecha <= fechaFin) {
+            results.push({ id: doc.id, ...data });
+          }
+        });
+      }
+    }
+
+    return results;
+  }
+
   /**
    * Guarda un mes específico para todos los empleados que tengan UID asignado
    */
@@ -111,6 +162,7 @@ export class MallaService {
             fuente: "import_excel",
             nombre: row.nombre,
             documento: row.documento ?? null,
+            userId: row.uid,
             updatedAt: Timestamp.now(),
           },
           { merge: true }
@@ -119,7 +171,7 @@ export class MallaService {
         ops++;
         totalWrites++;
 
-        if (ops >= 450) {
+        if (ops >= 500) {
           await batch.commit();
           console.log(`✅ Batch parcial ejecutado (${ops} operaciones)`);
           batch = writeBatch(db);
@@ -186,7 +238,7 @@ export class MallaService {
       ops++;
       totalWrites++;
 
-      if (ops >= 450) {
+      if (ops >= 500) {
         await batch.commit();
         console.log(`✅ Batch parcial ejecutado (${ops} operaciones)`);
         batch = writeBatch(db);
@@ -199,10 +251,76 @@ export class MallaService {
       console.log(`✅ Último batch ejecutado (${ops} operaciones)`);
     }
 
+    // Recalcular jornadas para los días cambiados
+    for (const cell of changedCells) {
+      const fecha = `${year}-${String(monthIndex + 1).padStart(
+        2,
+        "0"
+      )}-${String(cell.day).padStart(2, "0")}`;
+      await MallaService.recalculateJornadaForDay(
+        row.uid,
+        fecha,
+        cell.turnoId ?? cell.turno
+      );
+    }
+
     console.log(
       `📌 Total de escrituras realizadas para el día: ${totalWrites}`
     );
     return totalWrites;
+  }
+
+  /**
+   * Guarda un día específico de un empleado (para edición individual)
+   */
+  static async saveEmployeeDay(params: {
+    row: PreviewRow;
+    year: number;
+    monthIndex: number;
+    day: number;
+  }) {
+    const { row, year, monthIndex, day } = params;
+
+    if (!row.uid) {
+      throw new Error("La fila no tiene UID asignado.");
+    }
+
+    const cell = row.cells.find((c) => c.day === day);
+    if (!cell) {
+      throw new Error("Día no encontrado en la fila.");
+    }
+
+    const mm = String(monthIndex + 1).padStart(2, "0");
+    const dd = String(day).padStart(2, "0");
+
+    const monthId = `${year}_${mm}`;
+    const dayId = dd;
+
+    const ref = doc(db, "usuarios", row.uid, "malla", monthId, "dias", dayId);
+
+    await setDoc(
+      ref,
+      {
+        turno: cell.turnoId ?? cell.turno,
+        fecha: `${year}-${mm}-${dd}`,
+        fuente: "individual_edit",
+        nombre: row.nombre,
+        documento: row.documento ?? null,
+        userId: row.uid,
+        updatedAt: Timestamp.now(),
+      },
+      { merge: true }
+    );
+
+    // Recalcular jornada para este día
+    await MallaService.recalculateJornadaForDay(
+      row.uid,
+      `${year}-${mm}-${dd}`,
+      cell.turnoId ?? cell.turno
+    );
+
+    console.log(`📌 Día ${day} guardado para ${row.nombre}`);
+    return 1;
   }
 
   /**
@@ -241,9 +359,17 @@ export class MallaService {
         fuente: "manual_edit",
         nombre: row.nombre,
         documento: row.documento ?? null,
+        userId: row.uid,
         updatedAt: Timestamp.now(),
       },
       { merge: true }
+    );
+
+    // Recalcular jornada para este día
+    await MallaService.recalculateJornadaForDay(
+      row.uid,
+      `${year}-${mm}-${dd}`,
+      cell.turnoId ?? cell.turno
     );
 
     console.log(`📌 Día ${day} guardado para ${row.nombre}`);
@@ -307,7 +433,7 @@ export class MallaService {
       }
 
       for (const cell of row.cells) {
-        if (!cell.turno || cell.turno === "D") continue; // Solo calcular si hay turno asignado
+        if (!cell.turno) continue; // Calcular incluso para días de descanso "D"
 
         // Construir fecha
         const fecha = `${year}-${String(monthIndex + 1).padStart(
@@ -315,7 +441,7 @@ export class MallaService {
           "0"
         )}-${String(cell.day).padStart(2, "0")}`;
 
-        // Verificar si jornada ya existe
+        // Eliminar jornada existente si hay
         const jornadaQuery = query(
           collection(db, "usuarios", row.uid, "jornadas"),
           where("fecha", "==", fecha)
@@ -323,16 +449,20 @@ export class MallaService {
         const jornadaSnap = await getDocs(jornadaQuery);
 
         if (!jornadaSnap.empty) {
-          console.log(`⏭️ Jornada ya existe para ${row.nombre} en ${fecha}`);
-          continue;
+          for (const docSnap of jornadaSnap.docs) {
+            await eliminarJornada(row.uid, docSnap.id);
+          }
+          console.log(
+            `🗑️ ${jornadaSnap.docs.length} jornadas eliminadas para ${row.nombre} en ${fecha}`
+          );
         }
 
         try {
-          // Crear jornada calculada
+          // Crear jornada calculada con el turno actual (incluso para días de descanso "D")
           await crearJornadaCalculada({
             empleado,
             fecha,
-            turnoId: cell.turno,
+            turnoId: cell.turno === "D" ? "D" : cell.turno, // Usar "D" directamente si es descanso
           });
           totalJornadas++;
           console.log(`✅ Jornada creada para ${row.nombre} en ${fecha}`);
@@ -391,5 +521,55 @@ export class MallaService {
 
     console.log(`🎉 Guardado TOTAL completado: ${total} operaciones`);
     return total;
+  }
+
+  /**
+   * Recalcula la jornada para un día específico de un empleado
+   */
+  static async recalculateJornadaForDay(
+    userId: string,
+    fecha: string,
+    turnoId: string
+  ) {
+    try {
+      // Primero eliminar TODAS las jornadas existentes para esa fecha
+      const jornadaQuery = query(
+        collection(db, "usuarios", userId, "jornadas"),
+        where("fecha", "==", fecha)
+      );
+      const jornadaSnap = await getDocs(jornadaQuery);
+
+      if (!jornadaSnap.empty) {
+        for (const docSnap of jornadaSnap.docs) {
+          await eliminarJornada(userId, docSnap.id);
+        }
+        console.log(
+          `🗑️ ${jornadaSnap.docs.length} jornadas eliminadas para ${userId} en ${fecha}`
+        );
+      }
+
+      // Obtener datos del empleado
+      const empleado = await EmpleadoService.obtener(userId);
+      if (!empleado) {
+        console.warn(`⚠️ Empleado ${userId} no encontrado`);
+        return;
+      }
+
+      // Crear nueva jornada con el turno actualizado
+      await crearJornadaCalculada({
+        empleado,
+        fecha,
+        turnoId,
+      });
+
+      console.log(
+        `✅ Jornada recalculada para ${userId} en ${fecha} con turno ${turnoId}`
+      );
+    } catch (error) {
+      console.error(
+        `❌ Error recalculando jornada para ${userId} en ${fecha}:`,
+        error
+      );
+    }
   }
 }

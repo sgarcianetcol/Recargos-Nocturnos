@@ -64,13 +64,22 @@ export default function CalcularJornadaPage() {
     const sheet = workbook.addWorksheet("Jornada");
 
     // 🟢 Títulos en la primera fila
+    const filteredHoras = Object.fromEntries(
+      Object.entries(preview.horas).filter(
+        ([k]) => k !== "Hora laboral ordinaria"
+      )
+    );
+    const filteredValores = Object.fromEntries(
+      Object.entries(preview.valores).filter(
+        ([k]) => k !== "Valor Hora laboral ordinaria"
+      )
+    );
     const headers = [
       "Empleado",
       "Fecha",
       "Turno",
-      "Tarifa hora",
-      ...Object.keys(preview.horas),
-      ...Object.keys(preview.valores),
+      ...Object.keys(filteredHoras),
+      ...Object.keys(filteredValores),
     ];
 
     sheet.addRow(headers);
@@ -80,9 +89,8 @@ export default function CalcularJornadaPage() {
       preview.empleado.nombre,
       fecha?.toLocaleDateString("es-CO"),
       `${preview.turno.id} (${preview.turno.horaEntrada}–${preview.turno.horaSalida})`,
-      preview.tarifa.toLocaleString("es-CO"),
-      ...Object.values(preview.horas),
-      ...Object.values(preview.valores),
+      ...Object.values(filteredHoras),
+      ...Object.values(filteredValores),
     ];
 
     sheet.addRow(data);
@@ -255,6 +263,7 @@ export default function CalcularJornadaPage() {
             horaEntrada: trn.horaEntrada,
             horaSalida: trn.horaSalida,
             esDominicalFestivo: esDF,
+            recargosActivos: true,
           }
         );
 
@@ -403,9 +412,7 @@ export default function CalcularJornadaPage() {
                 <b>Turno:</b> {preview.turno.id} ({preview.turno.horaEntrada}–
                 {preview.turno.horaSalida})
               </li>
-              <li>
-                <b>Tarifa hora:</b> ${preview.tarifa.toLocaleString("es-CO")}
-              </li>
+
               <li>
                 <b>Horas base/día:</b> {rules?.baseDailyHours}
               </li>
@@ -433,12 +440,14 @@ export default function CalcularJornadaPage() {
             <h3 className="font-semibold mb-2 text-gray-700">Horas</h3>
             <table className="w-full text-sm">
               <tbody className="[&>tr>td]:py-1">
-                {Object.entries(preview.horas).map(([k, v]) => (
-                  <tr key={k}>
-                    <td>{k}</td>
-                    <td className="text-right">{String(v)}</td>
-                  </tr>
-                ))}
+                {Object.entries(preview.horas)
+                  .filter(([k]) => k !== "Hora laboral ordinaria")
+                  .map(([k, v]) => (
+                    <tr key={k}>
+                      <td>{k}</td>
+                      <td className="text-right">{String(v)}</td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
           </section>

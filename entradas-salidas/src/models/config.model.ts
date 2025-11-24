@@ -5,12 +5,12 @@ export interface NominaConfig {
 
 export interface RecargosConfig {
   recargo_nocturno_ordinario: number; // 0.35
-  recargo_festivo_diurno: number; // 0.75
-  recargo_festivo_nocturno: number; // 1.10
-  extra_diurna: number; // 0.25
-  extra_nocturna: number; // 0.75
-  extra_diurna_dominical: number; // 1.00
-  extra_nocturna_dominical: number; // 1.50
+  recargo_festivo_diurno: number; // 0.80
+  recargo_festivo_nocturno: number; // 1.15
+  extra_diurna: number; // 1.25
+  extra_nocturna: number; // 1.75
+  extra_diurna_dominical: number; // 2.05
+  extra_nocturna_dominical: number; // 2.55
   fixedRecargoValue?: number; // Optional fixed value for recargo nocturno
 }
 

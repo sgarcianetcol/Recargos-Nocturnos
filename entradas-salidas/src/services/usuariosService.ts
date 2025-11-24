@@ -60,13 +60,11 @@ function mapDocToEmpleado(d: DocumentData, id: string): Empleado {
 const colRef = collection(db, "usuarios");
 
 /* ===========================
-   NUEVO: Crear empleado con acceso y envío de correo
+   NUEVO: Crear empleado con acceso (usando API)
 =========================== */
 export async function crearEmpleadoConAcceso(
   data: Omit<Empleado, "id" | "creadoEn">
 ) {
-  const auth = getAuth();
-
   if (!data.correo || !data.nombre) {
     throw new Error("Faltan campos obligatorios: nombre / correo.");
   }
@@ -74,28 +72,22 @@ export async function crearEmpleadoConAcceso(
     throw new Error("El salario debe ser mayor a 0.");
   }
 
-  // 🔐 Contraseña temporal aleatoria
-  const tempPassword = Math.random().toString(36).slice(-12);
-
-  // 1. Crear usuario en Firebase Auth
-  const userCred = await createUserWithEmailAndPassword(
-    auth,
-    data.correo,
-    tempPassword
-  );
-  const uid = userCred.user.uid;
-
-  // 2. Guardar en Firestore con mismo UID
-  await setDoc(doc(db, "usuarios", uid), {
-    ...data,
-    activo: true,
-    creadoEn: serverTimestamp(),
+  // Llamar al API route en lugar de crear directamente
+  const response = await fetch("/api/crear-empleado", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
   });
 
-  // 3. Enviar correo para que defina su propia contraseña
-  await sendPasswordResetEmail(auth, data.correo);
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || "Error creando empleado");
+  }
 
-  return uid;
+  const result = await response.json();
+  return result.uid;
 }
 
 /* ===========================
