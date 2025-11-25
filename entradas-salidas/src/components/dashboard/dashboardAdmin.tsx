@@ -181,7 +181,6 @@ export default function DashboardAdmin() {
                           <SelectContent>
                             <SelectItem value="todos">Todos</SelectItem>
                             <SelectItem value="admin">Admin</SelectItem>
-                            <SelectItem value="líder">Líder</SelectItem>
                             <SelectItem value="empleado">Empleado</SelectItem>
                           </SelectContent>
                         </Select>

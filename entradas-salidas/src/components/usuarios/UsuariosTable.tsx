@@ -53,7 +53,6 @@ export default function UsuariosTable() {
   const normalizeRol = (rol: string): Empleado["rol"] => {
     const lower = rol.toLowerCase().trim();
     if (lower === "admin") return "admin";
-    if (lower === "líder" || lower === "lider") return "líder";
     return "empleado";
   };
 
@@ -290,7 +289,7 @@ export default function UsuariosTable() {
       }
 
       const auth = getAuth();
-      const VALID_ROLES = ["admin", "líder", "empleado"];
+      const VALID_ROLES = ["admin", "empleado"];
 
       const result = {
         creados: 0,
@@ -340,8 +339,6 @@ export default function UsuariosTable() {
         // Mapear a tipo exacto esperado
         let rolVal: Empleado["rol"] = "empleado";
         if (rolNormalized === "admin") rolVal = "admin";
-        if (rolNormalized === "lider" || rolNormalized === "líder")
-          rolVal = "líder";
 
         // Salario
         const salario = parseSalario(salarioRaw);
@@ -625,7 +622,6 @@ export default function UsuariosTable() {
           <SelectContent>
             <SelectItem value="todos">Todos los roles</SelectItem>
             <SelectItem value="admin">Admin</SelectItem>
-            <SelectItem value="líder">Líder</SelectItem>
             <SelectItem value="empleado">Empleado</SelectItem>
           </SelectContent>
         </Select>
@@ -739,7 +735,6 @@ export default function UsuariosTable() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="admin">Admin</SelectItem>
-                <SelectItem value="líder">Líder</SelectItem>
                 <SelectItem value="empleado">Empleado</SelectItem>
               </SelectContent>
             </Select>
@@ -811,7 +806,6 @@ export default function UsuariosTable() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="líder">Líder</SelectItem>
                   <SelectItem value="empleado">Empleado</SelectItem>
                 </SelectContent>
               </Select>

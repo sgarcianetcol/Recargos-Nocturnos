@@ -253,7 +253,11 @@ export default function NominaResumen() {
           ? 0
           : j.extrasNocturnasDominical ?? 0;
 
-        r.total$ += recargosDesactivados ? 0 : (isNaN(j.valorTotalDia) ? 0 : j.valorTotalDia ?? 0);
+        r.total$ += recargosDesactivados
+          ? 0
+          : isNaN(j.valorTotalDia)
+          ? 0
+          : j.valorTotalDia ?? 0;
         r.totalHoras += Number(j.totalHoras) || 0;
 
         // For employees with recargos deactivated, set all payment fields to 0 except totalHoras
@@ -308,112 +312,287 @@ export default function NominaResumen() {
       empleados[doc.id] = doc.data();
     });
 
-    // 🔹 Cargar configuración de recargos
-    const recargosSnap = await getDoc(doc(db, "config", "recargos"));
-    const recargosCfg = recargosSnap.exists()
-      ? (recargosSnap.data() as any)
-      : {
-          recargo_nocturno_ordinario: 0.35,
-          recargo_festivo_diurno: 0.8,
-          recargo_festivo_nocturno: 1.15,
-          extra_diurna: 0.25,
-          extra_nocturna: 0.75,
-          extra_diurna_dominical: 1.05,
-          extra_nocturna_dominical: 1.55,
-        };
+    // 🔹 Definir tipo para las filas de datos (ELIMINAMOS MES REPORTADO)
+    type DataRow = {
+      [key: string]: string | number;
+      "MES CAUSADO": string;
+      NOMBRE: string;
+      CEDULA: any;
+      SALARIO: number;
+      "HORA ORDINARIA (NO MODIFICAR)": number;
+      FECHA: string;
+      PROYECTO: string;
+      "CANTIDAD HORA EXTRA DIURNA": number;
+      "CANTIDAD HORA EXTRA NOCTURNA": number;
+      "CANTIDAD HORA EXTRA DIURNA FESTIVA": number;
+      "CANTIDAD HORA EXTRA FESTIVA NOCTURNA": number;
+      "CANTIDAD RECARGO DIURNO FESTIVO": number;
+      "CANTIDAD RECARGO NOCTURNO": number;
+      "CANTIDAD RECARGO FESTIVO NOCTURNO": number;
+      "CANTIDAD RECARGO FESTIVO DIURNO": number;
+      "CANTIDAD HDD SIN COM": number;
+      "CANTIDAD HDD CON COMPENSATORIO": number;
+      "HORA EXTRA DIURNA (1.25)": number;
+      "HORA EXTRA NOCTURNA (1.75)": number;
+      "HORA EXTRA DIURNA FESTIVA (2.05)": number;
+      "HORA EXTRA FESTIVA NOCTURNA (2.55)": number;
+      "RECARGO NOCTURNO (0.35)": number;
+      "RECARGO DIURNO FESTIVO (0.80)": number;
+      "RECARGO FESTIVO NOCTURNO (1.15)": number;
+      "HDD SIN COMPENSATORIO (1.80)": number;
+      "HDD CON COMPESATORÍO (0,80)": number;
+      TOTAL: number;
+    };
 
-    // 🔹 Construir datos
-    const data = filtrados.map((r) => {
+    // 🔹 OBTENER MES CAUSADO CON FORMATO NOV-DIC
+    const mesCausado = obtenerMesCausadoFormato(fechaInicio, fechaFin);
+    const fechaActual = new Date().toISOString().split("T")[0];
+
+    // 🔹 Construir datos con información REAL del cálculo masivo
+    const data: DataRow[] = filtrados.map((r) => {
       const empleado = empleados[r.userId];
+      const salario = r.salarioBaseMensual ?? 0;
+
+      // 🔹 USAR DATOS REALES del cálculo masivo
+      const hExtraDiurna = r.hExtrasDiurnas ?? 0;
+      const hExtraNocturna = r.hExtrasNocturnas ?? 0;
+      const hExtraDiurnaFestiva = r.extrasDiurnasDominical ?? 0;
+      const hExtraFestivaNocturna = r.extrasNocturnasDominical ?? 0;
+      const recargoDiurnoFestivo = r.recargoFestivoDiurno ?? 0;
+      const recargoNocturno = r.recargoNocturnoOrdinario ?? 0;
+      const recargoFestivoNocturno = r.recargoFestivoNocturno ?? 0;
+      const recargoFestivoDiurno = r.recargoFestivoDiurno ?? 0;
+
+      // Si no tienes estos campos, déjalos en 0
+      const hddSinCom = 0;
+      const hddConCompensatorio = 0;
+
+      // Calcular valores (sin decimales) usando las fórmulas del Excel
+      const horaBase = salario / 220;
+      const valorHoraExtraDiurna = Math.round(horaBase * 1.25 * hExtraDiurna);
+      const valorHoraExtraNocturna = Math.round(
+        horaBase * 1.75 * hExtraNocturna
+      );
+      const valorHoraExtraDiurnaFestiva = Math.round(
+        horaBase * 2.05 * hExtraDiurnaFestiva
+      );
+      const valorHoraExtraFestivaNocturna = Math.round(
+        horaBase * 2.55 * hExtraFestivaNocturna
+      );
+      const valorRecargoNocturno = Math.round(
+        horaBase * 0.35 * recargoNocturno
+      );
+      const valorRecargoDiurnoFestivo = Math.round(
+        horaBase * 0.8 * recargoDiurnoFestivo
+      );
+      const valorRecargoFestivoNocturno = Math.round(
+        horaBase * 1.15 * recargoFestivoNocturno
+      );
+      const valorHddSinCom = Math.round(horaBase * 1.8 * hddSinCom);
+      const valorHddConCompensatorio = Math.round(
+        horaBase * 0.8 * hddConCompensatorio
+      );
+
+      const total =
+        valorHoraExtraDiurna +
+        valorHoraExtraNocturna +
+        valorHoraExtraDiurnaFestiva +
+        valorHoraExtraFestivaNocturna +
+        valorRecargoNocturno +
+        valorRecargoDiurnoFestivo +
+        valorRecargoFestivoNocturno +
+        valorHddSinCom +
+        valorHddConCompensatorio;
+
       return {
-        "MES CAUSADO": new Date()
-          .toLocaleString("default", { month: "long" })
-          .toUpperCase(),
+        // ELIMINAMOS "MES REPORTADO" completamente
+        "MES CAUSADO": mesCausado, // ← USAMOS EL FORMATO NOV-DIC
         NOMBRE: r.nombre,
         CEDULA: empleado?.documento ?? "",
-        EMPRESA: empleado?.empresa ?? "",
-        FECHA: new Date().toISOString().split("T")[0],
-        SALARIO: r.salarioBaseMensual ?? 0,
-        "HORA ORDINARIA (NO MODIFICAR)": r.hNormales ?? 0,
-        "TOTAL HORAS": r.totalHoras ?? 0,
-        "CANTIDAD HORA EXTRA DIURNA": r.hExtrasDiurnas ?? 0,
-        "CANTIDAD HORA EXTRA NOCTURNA": r.hExtrasNocturnas ?? 0,
-        "CANTIDAD HORA EXTRA DIURNA FESTIVA": 0,
-        "CANTIDAD HORA EXTRA FESTIVA NOCTURNA": 0,
-        "CANTIDAD RECARGO DIURNO FESTIVO": 0,
-        "CANTIDAD RECARGO NOCTURNO": 0,
-        "CANTIDAD RECARGO FESTIVO NOCTURNO": 0,
-        "CANTIDAD RECARGO FESTIVO DIURNO": 0,
-        "HORA EXTRA DIURNA (0.25)":
-          (r.hExtrasDiurnas ?? 0) * recargosCfg.extra_diurna,
-        "HORA EXTRA NOCTURNA (0.75)":
-          (r.hExtrasNocturnas ?? 0) * recargosCfg.extra_nocturna,
-        "HORA EXTRA DIURNA FESTIVA (1.05)": 0,
-        "HORA EXTRA FESTIVA NOCTURNA (1.55)": 0,
-        "RECARGO NOCTURNO (0.35)":
-          (r.recargosH ?? 0) * recargosCfg.recargo_nocturno_ordinario,
-        "RECARGO DIURNO FESTIVO (0.80)": 0,
-        "RECARGO FESTIVO NOCTURNO (1.15)": 0,
-        TOTAL: r.total$ ?? 0,
+        SALARIO: Math.round(salario),
+        "HORA ORDINARIA (NO MODIFICAR)": Math.round(salario / 184),
+        FECHA: fechaActual,
+        PROYECTO: empleado?.proyecto ?? "",
+        "CANTIDAD HORA EXTRA DIURNA": hExtraDiurna,
+        "CANTIDAD HORA EXTRA NOCTURNA": hExtraNocturna,
+        "CANTIDAD HORA EXTRA DIURNA FESTIVA": hExtraDiurnaFestiva,
+        "CANTIDAD HORA EXTRA FESTIVA NOCTURNA": hExtraFestivaNocturna,
+        "CANTIDAD RECARGO DIURNO FESTIVO": recargoDiurnoFestivo,
+        "CANTIDAD RECARGO NOCTURNO": recargoNocturno,
+        "CANTIDAD RECARGO FESTIVO NOCTURNO": recargoFestivoNocturno,
+        "CANTIDAD RECARGO FESTIVO DIURNO": recargoFestivoDiurno,
+        "CANTIDAD HDD SIN COM": hddSinCom,
+        "CANTIDAD HDD CON COMPENSATORIO": hddConCompensatorio,
+        "HORA EXTRA DIURNA (1.25)": valorHoraExtraDiurna,
+        "HORA EXTRA NOCTURNA (1.75)": valorHoraExtraNocturna,
+        "HORA EXTRA DIURNA FESTIVA (2.05)": valorHoraExtraDiurnaFestiva,
+        "HORA EXTRA FESTIVA NOCTURNA (2.55)": valorHoraExtraFestivaNocturna,
+        "RECARGO NOCTURNO (0.35)": valorRecargoNocturno,
+        "RECARGO DIURNO FESTIVO (0.80)": valorRecargoDiurnoFestivo,
+        "RECARGO FESTIVO NOCTURNO (1.15)": valorRecargoFestivoNocturno,
+        "HDD SIN COMPENSATORIO (1.80)": valorHddSinCom,
+        "HDD CON COMPESATORÍO (0,80)": valorHddConCompensatorio,
+        TOTAL: total,
       };
     });
 
-    // 🔹 Calcular total general
-    const numericKeys = Object.keys(data[0]).filter(
-      (k) => typeof (data[0] as any)[k] === "number"
-    );
+    // 🔹 Calcular TOTALES REALES (no fórmulas)
+    const calcularTotal = (campo: string) => {
+      return data.reduce((sum, row) => sum + (Number(row[campo]) || 0), 0);
+    };
 
-    const totalRow = data.reduce((acc: any, curr: any) => {
-      numericKeys.forEach((key) => {
-        acc[key] = (acc[key] || 0) + (curr[key] ?? 0);
-      });
-      return acc;
-    }, {});
+    const totalRow: DataRow = {
+      "MES CAUSADO": "TOTAL",
+      NOMBRE: "",
+      CEDULA: "",
+      SALARIO: 0,
+      "HORA ORDINARIA (NO MODIFICAR)": Math.round(
+        calcularTotal("SALARIO") / 184
+      ),
+      FECHA: "",
+      PROYECTO: "",
+      "CANTIDAD HORA EXTRA DIURNA": calcularTotal("CANTIDAD HORA EXTRA DIURNA"),
+      "CANTIDAD HORA EXTRA NOCTURNA": calcularTotal(
+        "CANTIDAD HORA EXTRA NOCTURNA"
+      ),
+      "CANTIDAD HORA EXTRA DIURNA FESTIVA": calcularTotal(
+        "CANTIDAD HORA EXTRA DIURNA FESTIVA"
+      ),
+      "CANTIDAD HORA EXTRA FESTIVA NOCTURNA": calcularTotal(
+        "CANTIDAD HORA EXTRA FESTIVA NOCTURNA"
+      ),
+      "CANTIDAD RECARGO DIURNO FESTIVO": calcularTotal(
+        "CANTIDAD RECARGO DIURNO FESTIVO"
+      ),
+      "CANTIDAD RECARGO NOCTURNO": calcularTotal("CANTIDAD RECARGO NOCTURNO"),
+      "CANTIDAD RECARGO FESTIVO NOCTURNO": calcularTotal(
+        "CANTIDAD RECARGO FESTIVO NOCTURNO"
+      ),
+      "CANTIDAD RECARGO FESTIVO DIURNO": calcularTotal(
+        "CANTIDAD RECARGO FESTIVO DIURNO"
+      ),
+      "CANTIDAD HDD SIN COM": calcularTotal("CANTIDAD HDD SIN COM"),
+      "CANTIDAD HDD CON COMPENSATORIO": calcularTotal(
+        "CANTIDAD HDD CON COMPENSATORIO"
+      ),
+      "HORA EXTRA DIURNA (1.25)": calcularTotal("HORA EXTRA DIURNA (1.25)"),
+      "HORA EXTRA NOCTURNA (1.75)": calcularTotal("HORA EXTRA NOCTURNA (1.75)"),
+      "HORA EXTRA DIURNA FESTIVA (2.05)": calcularTotal(
+        "HORA EXTRA DIURNA FESTIVA (2.05)"
+      ),
+      "HORA EXTRA FESTIVA NOCTURNA (2.55)": calcularTotal(
+        "HORA EXTRA FESTIVA NOCTURNA (2.55)"
+      ),
+      "RECARGO NOCTURNO (0.35)": calcularTotal("RECARGO NOCTURNO (0.35)"),
+      "RECARGO DIURNO FESTIVO (0.80)": calcularTotal(
+        "RECARGO DIURNO FESTIVO (0.80)"
+      ),
+      "RECARGO FESTIVO NOCTURNO (1.15)": calcularTotal(
+        "RECARGO FESTIVO NOCTURNO (1.15)"
+      ),
+      "HDD SIN COMPENSATORIO (1.80)": calcularTotal(
+        "HDD SIN COMPENSATORIO (1.80)"
+      ),
+      "HDD CON COMPESATORÍO (0,80)": calcularTotal(
+        "HDD CON COMPESATORÍO (0,80)"
+      ),
+      TOTAL: calcularTotal("TOTAL"),
+    };
 
-    totalRow["FECHA"] = "TOTAL GENERAL";
     data.push(totalRow);
 
     // 🔹 Crear hoja
     const ws = XLSX.utils.json_to_sheet(data);
 
-    // 🔹 Formatear números con separadores tipo Colombia
-    const formatoColombiano = (valor: number) =>
-      valor.toLocaleString("es-CO").replace(/,/g, ".").replace(/\./, "'");
+    // 🔹 CONFIGURACIÓN DE COLORES ESPECÍFICA
+    // 🔹 CONFIGURACIÓN DE COLORES ESPECÍFICA
+    const COLORES = {
+      HEADER_PRINCIPAL: "9BC2E6", // Azul claro para todos los headers
+      COLUMNAS_DESTACADAS: "FFFF00", // Amarillo para columnas específicas
+      TOTAL_FILA: "000000", // Negro para TODA LA FILA TOTAL
+      TEXTO_BLANCO: "FFFFFF", // Blanco para texto
+      FONDO_BLANCO: "FFFFFF", // Blanco para fondo normal
+    };
 
+    // 🔹 Lista de columnas que deben ser AMARILLAS (FFFF00)
+    const columnasAmarillas = [
+      "NOMBRE",
+      "HORA ORDINARIA (NO MODIFICAR)",
+      "HORA EXTRA DIURNA (1.25)",
+      "HORA EXTRA NOCTURNA (1.75)",
+      "HORA EXTRA DIURNA FESTIVA (2.05)",
+      "HORA EXTRA FESTIVA NOCTURNA (2.55)",
+      "RECARGO NOCTURNO (0.35)",
+      "RECARGO DIURNO FESTIVO (0.80)",
+      "RECARGO FESTIVO NOCTURNO (1.15)",
+      "HDD SIN COMPENSATORIO (1.80)",
+      "HDD CON COMPESATORÍO (0,80)",
+      "TOTAL",
+    ];
+
+    // 🔹 Aplicar estilos con COLORES ESPECÍFICOS
     const range = XLSX.utils.decode_range(ws["!ref"]!);
+    const headers = Object.keys(data[0]); // Obtener nombres de columnas
+    const ultimaFila = data.length - 1; // Índice de la última fila (TOTAL)
+
+    // 🔹 Encontrar el índice de la columna "MES CAUSADO"
+    const columnaMesCausadoIndex = headers.indexOf("MES CAUSADO");
+
     for (let R = range.s.r; R <= range.e.r; ++R) {
+      // 🔹 Verificar si esta fila es la fila TOTAL (viendo la celda de MES CAUSADO)
+      const celdaMesCausado =
+        ws[XLSX.utils.encode_cell({ r: R, c: columnaMesCausadoIndex })];
+      const esFilaTotal = celdaMesCausado && celdaMesCausado.v === "TOTAL";
+
       for (let C = range.s.c; C <= range.e.c; ++C) {
         const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
         const cell = ws[cellAddress];
         if (!cell) continue;
 
         const isHeader = R === 0;
-        const isTotal = cell.v === "TOTAL GENERAL";
+        const nombreColumna = headers[C];
+        const esColumnaAmarilla = columnasAmarillas.includes(nombreColumna);
 
-        // 🔹 Formatear valores numéricos
+        // Formatear números sin decimales
         if (typeof cell.v === "number") {
-          const valor = cell.v as number;
-          cell.v = valor; // mantenemos número
-          cell.z = "#,##0"; // formato miles estándar (2.350.000)
+          cell.v = cell.v;
+          cell.z = "#,##0";
         }
 
-        // 🔹 Estilos generales
+        // 🔹 ASIGNAR COLORES SEGÚN LAS ESPECIFICACIONES
+        let colorFondo = COLORES.FONDO_BLANCO;
+        let colorTexto = "000000"; // Negro por defecto
+
+        if (isHeader) {
+          // TODOS los headers con fondo azul #9BC2E6
+          colorFondo = COLORES.HEADER_PRINCIPAL;
+        } else if (esFilaTotal) {
+          // 🔥 TODA LA FILA QUE DICE "TOTAL" en MES CAUSADO: fondo negro, texto blanco
+          colorFondo = COLORES.TOTAL_FILA;
+          colorTexto = COLORES.TEXTO_BLANCO;
+        } else if (esColumnaAmarilla && !isHeader) {
+          // Columnas específicas AMARILLAS (solo en filas de datos, no en header)
+          colorFondo = COLORES.COLUMNAS_DESTACADAS;
+        } else {
+          // Todo lo demás BLANCO
+          colorFondo = COLORES.FONDO_BLANCO;
+        }
+
         cell.s = {
           font: {
             name: "Calibri",
             sz: 10,
-            bold: isHeader || isTotal,
+            bold: isHeader || esFilaTotal,
+            color: { rgb: colorTexto },
           },
           alignment: {
             horizontal: "center",
             vertical: "center",
             wrapText: true,
           },
-          fill: isHeader
-            ? { fgColor: { rgb: "E9ECEF" } }
-            : isTotal
-            ? { fgColor: { rgb: "D6EAF8" } }
-            : undefined,
+          fill: {
+            fgColor: { rgb: colorFondo },
+          },
           border: {
             top: { style: "thin", color: { rgb: "000000" } },
             bottom: { style: "thin", color: { rgb: "000000" } },
@@ -423,17 +602,55 @@ export default function NominaResumen() {
         };
       }
     }
+    // 🔹 Ajustar ancho columnas (una columna menos porque eliminamos MES REPORTADO)
+    const columnWidths = [
+      10, 25, 15, 12, 25, 12, 15, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
+      12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
+    ];
+    ws["!cols"] = columnWidths.map((wch) => ({ wch }));
 
-    // 🔹 Ajustar ancho columnas
-    ws["!cols"] = Object.keys(data[0]).map((k) => ({
-      wch: Math.max(15, k.length + 2),
-    }));
-
-    // 🔹 Crear libro y guardar
+    // 🔹 Crear libro y guardar con nombre basado en el filtro
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Nomina");
-    XLSX.writeFile(wb, `nomina_${fechaInicio}_a_${fechaFin}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, "Hoja1");
+
+    // Nombre del archivo basado en el mes causado del filtro
+    const nombreArchivo = `HORAS_EXTRAS_${mesCausado}_${fechaActual}.xlsx`;
+    XLSX.writeFile(wb, nombreArchivo);
   };
+
+  // 🔹 FUNCIÓN AUXILIAR PARA OBTENER EL MES CAUSADO EN FORMATO NOV-DIC
+  function obtenerMesCausadoFormato(
+    fechaInicio: string,
+    fechaFin: string
+  ): string {
+    const fechaIni = new Date(fechaInicio);
+    const fechaFinObj = new Date(fechaFin);
+
+    const mesesAbreviados = [
+      "ENE",
+      "FEB",
+      "MAR",
+      "ABR",
+      "MAY",
+      "JUN",
+      "JUL",
+      "AGO",
+      "SEP",
+      "OCT",
+      "NOV",
+      "DIC",
+    ];
+
+    const mesInicio = mesesAbreviados[fechaIni.getMonth()];
+    const mesFin = mesesAbreviados[fechaFinObj.getMonth()];
+
+    // Si es el mismo mes, devolver solo un mes, sino dos meses
+    if (mesInicio === mesFin) {
+      return mesInicio;
+    } else {
+      return `${mesInicio}-${mesFin}`;
+    }
+  }
 
   // Nueva función para exportar detalle del empleado
   const exportarDetalleEmpleado = async () => {

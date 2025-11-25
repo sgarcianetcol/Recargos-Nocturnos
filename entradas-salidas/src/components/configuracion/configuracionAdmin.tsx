@@ -504,7 +504,6 @@ export default function ConfiguracionAdmin() {
                         className="text-sm border rounded px-2 py-1 capitalize"
                       >
                         <option value="empleado">Empleado</option>
-                        <option value="líder">Líder</option>
                         <option value="admin">Admin</option>
                       </select>
                     </td>
@@ -890,7 +889,6 @@ export default function ConfiguracionAdmin() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="empleado">Empleado</SelectItem>
-                    <SelectItem value="líder">Líder</SelectItem>
                     <SelectItem value="admin">Admin</SelectItem>
                   </SelectContent>
                 </Select>

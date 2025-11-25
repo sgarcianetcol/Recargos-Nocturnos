@@ -1,24 +1,32 @@
 import { NextApiRequest, NextApiResponse } from "next";
+
 import * as admin from "firebase-admin";
 import nodemailer from "nodemailer";
 
 // Inicializar Firebase Admin solo una vez
+
 if (!admin.apps.length) {
+  if (!process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL || !process.env.FIREBASE_PRIVATE_KEY) {
+    throw new Error("Faltan variables de entorno para Firebase Admin SDK. Por favor configura FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL y FIREBASE_PRIVATE_KEY en .env.local");
+  }
+
+  const credentialConfig = {
+    projectId: process.env.FIREBASE_PROJECT_ID,
+    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+    privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+  };
+
   admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
-    }),
+    credential: admin.credential.cert(credentialConfig),
   });
 }
 
-// Configurar Nodemailer con Gmail + contraseña de aplicación
+// Configurar Nodemailer
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
-    user: process.env.EMAIL_USER, // tu correo@gmail.com
-    pass: process.env.EMAIL_PASS, // qafczuecrrgmdrxa
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
   },
 });
 
@@ -34,7 +42,6 @@ export default async function handler(
     const { nombre, correo, documento, rol, empresa, activo, salarioBaseMensual } =
       req.body;
 
-    // Validaciones
     if (!nombre || !correo || !salarioBaseMensual || salarioBaseMensual <= 0) {
       return res
         .status(400)
@@ -49,7 +56,7 @@ export default async function handler(
       disabled: !activo,
     });
 
-    // Guardar datos adicionales en Firestore
+    // Guardar en Firestore
     await admin.firestore().collection("usuarios").doc(userRecord.uid).set({
       nombre,
       correo,
@@ -61,10 +68,9 @@ export default async function handler(
       creadoEn: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    // Generar enlace de restablecimiento de contraseña
+    // Enlace para definir contraseña
     const resetLink = await admin.auth().generatePasswordResetLink(correo);
 
-    // Construir correo
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: correo,
@@ -90,7 +96,6 @@ export default async function handler(
       `,
     };
 
-    // Enviar correo
     await transporter.sendMail(mailOptions);
 
     res.status(200).json({

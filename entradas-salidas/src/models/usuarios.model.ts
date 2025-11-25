@@ -1,4 +1,4 @@
-export type Rol = "admin" | "líder" | "empleado";
+export type Rol = "admin"  | "empleado";
 export type Empresas = "NETCOL" | "TRIANGULUM" | "INTEEGRA";
 
 export interface Empleado {
