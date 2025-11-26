@@ -2,6 +2,11 @@
 "use client";
 
 import * as React from "react";
+import {
+  DEFAULT_NOMINA,
+  DEFAULT_RECARGOS,
+  DEFAULT_RULES,
+} from "@/models/defaults";
 import { useEffect, useState, useCallback } from "react";
 import {
   AlertDialog,
@@ -49,6 +54,17 @@ import {
   getParametros,
   actualizarParametros,
 } from "@/services/parametros.service";
+import { MallaService } from "@/services/malla.service";
+import {
+  eliminarJornada,
+  crearJornadaCalculada,
+  listarJornadasPorUsuarioRango,
+  actualizarJornada,
+} from "@/services/jornada.service";
+import { ConfigNominaService } from "@/services/config.service";
+import { calcularDiaBasico } from "@/services/calculoBasico.service";
+import { esDominicalOFestivo } from "@/services/festivos.service";
+import { JornadaDoc } from "@/models/jornada.model";
 
 // Tipos
 import type { Empleado, Rol, Empresas } from "@/models/usuarios.model";
@@ -304,13 +320,17 @@ export default function ConfiguracionAdmin() {
           u.id === userId ? { ...u, recargosActivos: activar } : u
         )
       );
+
+      // Recalcular todas las jornadas del empleado para aplicar el nuevo estado de recargos
+      await recalcularJornadasEmpleado(userId);
+
       mostrarMensaje(
         "exito",
-        `Recargos ${activar ? "activados" : "desactivados"}`
+        `Extras ${activar ? "activados" : "desactivados"}`
       );
     } catch (err) {
       console.error("Error toggleRecargos:", err);
-      mostrarMensaje("error", "Error al cambiar recargos");
+      mostrarMensaje("error", "Error al cambiar extras");
     }
   };
 
@@ -370,6 +390,155 @@ export default function ConfiguracionAdmin() {
       mostrarMensaje("error", "Error al guardar parámetros");
     } finally {
       setGuardando(false);
+    }
+  };
+
+  // ============================================================================
+  // RECALCULAR JORNADAS
+  // ============================================================================
+
+  const recalcularJornadasEmpleado = async (userId: string) => {
+    try {
+      // Obtener todas las jornadas del empleado
+      const jornadas = await listarJornadasPorUsuarioRango({
+        userId,
+        desdeISO: "2020-01-01", // Fecha antigua para obtener todas
+        hastaISO: new Date().toISOString().split("T")[0],
+      });
+
+      // Obtener datos del empleado actualizados
+      const empleado = await EmpleadoService.obtener(userId);
+      if (!empleado) {
+        console.warn(`Empleado ${userId} no encontrado`);
+        return;
+      }
+
+      // Obtener configuraciones para recalcular
+      const [nominaCfgRaw, recargosCfgRaw, rulesRaw] = await Promise.all([
+        ConfigNominaService.getNomina(),
+        ConfigNominaService.getRecargos(),
+        ConfigNominaService.getRules(),
+      ]);
+
+      const nominaCfg = nominaCfgRaw ?? DEFAULT_NOMINA;
+      const recargosCfg = recargosCfgRaw ?? DEFAULT_RECARGOS;
+      const rules = rulesRaw ?? DEFAULT_RULES;
+
+      // Recalcular cada jornada
+      for (const jornada of jornadas) {
+        try {
+          // Verificar que la jornada tenga ID
+          if (!jornada.id) {
+            console.warn(`Jornada sin ID encontrada, saltando:`, jornada);
+            continue;
+          }
+
+          // Recalcular con el nuevo estado de recargos
+          const calc = calcularDiaBasico(
+            empleado.salarioBaseMensual ?? 0,
+            nominaCfg,
+            recargosCfg,
+            rules,
+            {
+              fecha: jornada.fecha,
+              horaEntrada: jornada.horaEntrada,
+              horaSalida: jornada.horaSalida,
+              esDominicalFestivo: jornada.esDominicalFestivo,
+              recargosActivos: empleado.recargosActivos ?? true,
+            }
+          );
+
+          // Actualizar jornada existente con los nuevos valores calculados
+          const updateData: Partial<JornadaDoc> = {
+            // Horas recalculadas
+            recargoNocturnoOrdinario:
+              jornada.turnoId === "D"
+                ? 0
+                : calc.horas?.["Recargo Nocturno Ordinario"] ?? 0,
+            recargoFestivoDiurno:
+              jornada.turnoId === "D"
+                ? 0
+                : calc.horas?.["Recargo Festivo Diurno"] ?? 0,
+            recargoFestivoNocturno:
+              jornada.turnoId === "D"
+                ? 0
+                : calc.horas?.["Recargo Festivo Nocturno"] ?? 0,
+            extrasDiurnas:
+              jornada.turnoId === "D" ? 0 : calc.horas?.["Extras Diurnas"] ?? 0,
+            extrasNocturnas:
+              jornada.turnoId === "D"
+                ? 0
+                : calc.horas?.["Extras Nocturnas"] ?? 0,
+            extrasDiurnasDominical:
+              jornada.turnoId === "D"
+                ? 0
+                : calc.horas?.["Extras Diurnas Dominical"] ?? 0,
+            extrasNocturnasDominical:
+              jornada.turnoId === "D"
+                ? 0
+                : calc.horas?.["Extras Nocturnas Dominical"] ?? 0,
+            horasExtras:
+              jornada.turnoId === "D"
+                ? 0
+                : (calc.horas?.["Extras Diurnas"] ?? 0) +
+                  (calc.horas?.["Extras Nocturnas"] ?? 0) +
+                  (calc.horas?.["Extras Diurnas Dominical"] ?? 0) +
+                  (calc.horas?.["Extras Nocturnas Dominical"] ?? 0),
+            totalHoras:
+              jornada.turnoId === "D" ? 0 : calc.horas?.["Total Horas"] ?? 0,
+
+            // Valores recalculados
+            valorRecargoNocturnoOrdinario:
+              jornada.turnoId === "D"
+                ? 0
+                : calc.valores?.["Valor Recargo Nocturno Ordinario"] ?? 0,
+            valorRecargoFestivoDiurno:
+              jornada.turnoId === "D"
+                ? 0
+                : calc.valores?.["Valor Recargo Festivo Diurno"] ?? 0,
+            valorRecargoFestivoNocturno:
+              jornada.turnoId === "D"
+                ? 0
+                : calc.valores?.["Valor Recargo Festivo Nocturno"] ?? 0,
+            valorExtrasDiurnas:
+              jornada.turnoId === "D"
+                ? 0
+                : calc.valores?.["Valor Extras Diurnas"] ?? 0,
+            valorExtrasNocturnas:
+              jornada.turnoId === "D"
+                ? 0
+                : calc.valores?.["Valor Extras Nocturnas"] ?? 0,
+            valorExtrasDiurnasDominical:
+              jornada.turnoId === "D"
+                ? 0
+                : calc.valores?.["Valor Extras Diurnas Dominical"] ?? 0,
+            valorExtrasNocturnasDominical:
+              jornada.turnoId === "D"
+                ? 0
+                : calc.valores?.["Valor Extras Nocturnas Dominical"] ?? 0,
+            valorTotalDia:
+              jornada.turnoId === "D"
+                ? 0
+                : calc.valores?.["Valor Total Día"] ?? 0,
+          };
+
+          await actualizarJornada(userId, jornada.id, updateData);
+
+          console.log(`Jornada actualizada para ${userId} en ${jornada.fecha}`);
+        } catch (error) {
+          console.error(
+            `Error recalculando jornada ${jornada.id || "sin ID"}:`,
+            error
+          );
+        }
+      }
+
+      console.log(
+        `Recálculo completado para ${userId}: ${jornadas.length} jornadas`
+      );
+    } catch (error) {
+      console.error(`Error recalculando jornadas para ${userId}:`, error);
+      throw error;
     }
   };
 
@@ -472,7 +641,7 @@ export default function ConfiguracionAdmin() {
                 <th className="p-3 text-left">Rol</th>
                 <th className="p-3 text-left">Empresa</th>
                 <th className="p-3 text-center">Salario</th>
-                <th className="p-3 text-center">Recargos</th>
+                <th className="p-3 text-center">Extras</th>
                 <th className="p-3 text-center">Acciones</th>
               </tr>
             </thead>

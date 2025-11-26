@@ -263,7 +263,7 @@ export default function CalcularJornadaPage() {
             horaEntrada: trn.horaEntrada,
             horaSalida: trn.horaSalida,
             esDominicalFestivo: esDF,
-            recargosActivos: true,
+            recargosActivos: emp.recargosActivos ?? true,
           }
         );
 

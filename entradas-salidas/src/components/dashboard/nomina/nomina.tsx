@@ -156,6 +156,30 @@ export default function NominaResumen() {
       console.log("👥 Empleados cargados:", Object.keys(empleados).length);
       console.log("📋 Ejemplo empleado:", Object.entries(empleados)[0]);
 
+      // 🔹 Verificar si algún empleado tiene recargosActivos = false y ajustar jornadas
+      for (const jornada of list) {
+        const empleado = empleados[jornada.userId];
+        if (empleado && empleado.recargosActivos === false) {
+          // Si el empleado tiene extras desactivados, forzar extras a 0
+          jornada.extrasDiurnas = 0;
+          jornada.extrasNocturnas = 0;
+          jornada.extrasDiurnasDominical = 0;
+          jornada.extrasNocturnasDominical = 0;
+          jornada.horasExtras = 0;
+          jornada.valorExtrasDiurnas = 0;
+          jornada.valorExtrasNocturnas = 0;
+          jornada.valorExtrasDiurnasDominical = 0;
+          jornada.valorExtrasNocturnasDominical = 0;
+          // Recalcular valorTotalDia restando los valores de extras
+          jornada.valorTotalDia =
+            (jornada.valorTotalDia || 0) -
+            (jornada.valorExtrasDiurnas || 0) -
+            (jornada.valorExtrasNocturnas || 0) -
+            (jornada.valorExtrasDiurnasDominical || 0) -
+            (jornada.valorExtrasNocturnasDominical || 0);
+        }
+      }
+
       // 🔹 Agrupar por usuario
       const map = new Map<string, NominaRow>();
 
@@ -168,15 +192,14 @@ export default function NominaResumen() {
         const empleado = empleados[j.userId];
         const salarioBase = empleado?.salarioBaseMensual ?? 0;
         const valorHora = salarioBase ? salarioBase / 220 : 0;
-        const recargosDesactivados = empleado?.recargosActivos === false;
 
         let r = map.get(j.userId);
         if (!r) {
           r = {
             userId: j.userId,
             nombre: empleado?.nombre ?? nombres[j.userId] ?? j.userId,
-            salarioBaseMensual: recargosDesactivados ? 0 : salarioBase,
-            valorHora: recargosDesactivados ? 0 : valorHora,
+            salarioBaseMensual: salarioBase,
+            valorHora: valorHora,
             hNormales: 0,
             hExtras: 0,
             hExtrasDiurnas: 0,
@@ -253,30 +276,8 @@ export default function NominaResumen() {
           ? 0
           : j.extrasNocturnasDominical ?? 0;
 
-        r.total$ += recargosDesactivados
-          ? 0
-          : isNaN(j.valorTotalDia)
-          ? 0
-          : j.valorTotalDia ?? 0;
+        r.total$ += isNaN(j.valorTotalDia) ? 0 : j.valorTotalDia ?? 0;
         r.totalHoras += Number(j.totalHoras) || 0;
-
-        // For employees with recargos deactivated, set all payment fields to 0 except totalHoras
-        if (recargosDesactivados) {
-          r.hNormales = 0;
-          r.hExtras = 0;
-          r.hExtrasDiurnas = 0;
-          r.hExtrasNocturnas = 0;
-          r.hDominicales = 0;
-          r.recargosH = 0;
-          r.recargoNocturnoOrdinario = 0;
-          r.recargoFestivoDiurno = 0;
-          r.recargoFestivoNocturno = 0;
-          r.extrasDiurnas = 0;
-          r.extrasNocturnas = 0;
-          r.extrasDiurnasDominical = 0;
-          r.extrasNocturnasDominical = 0;
-          r.total$ = 0;
-        }
       }
 
       const rowsFinal = [...map.values()];

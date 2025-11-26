@@ -162,7 +162,7 @@ export default function MallaInfo() {
                 <Button
                   onClick={handleRefresh}
                   disabled={refreshing}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                  className="w-full black-600 hover:black-700 text-white"
                 >
                   <RefreshCw
                     className={`w-4 h-4 mr-2 ${
@@ -215,11 +215,8 @@ export default function MallaInfo() {
             },
           ]
             .filter((item) => {
-              // Hide "Total a Pagar" for employees with recargos deactivated
-              return (
-                userData?.recargosActivos !== false ||
-                item.title !== "Total a Pagar"
-              );
+              // Always show "Total a Pagar" since recargos are now calculated even when deactivated
+              return true;
             })
             .map((item, i) => {
               const getValueClass = (value: string) => {
@@ -230,17 +227,17 @@ export default function MallaInfo() {
               return (
                 <Card
                   key={i}
-                  className={`rounded-2xl bg-gradient-to-br ${item.color} text-black shadow-xl border-0 hover:scale-[1.02] transition-all min-h-[140px]`}
+                  className={`rounded-2xl bg-black text-white shadow-xl border-0 hover:scale-[1.02] transition-all min-h-[140px]`}
                 >
                   <CardContent className="p-6 flex flex-col items-center justify-center text-center">
-                    <item.icon className="w-10 h-10 text-gray-900 dark:text-gray-100 opacity-90 mb-2" />
-                    <p className="text-sm font-bold text-gray-900 dark:text-gray-100 mb-1">
+                    <item.icon className="w-10 h-10 text-white opacity-90 mb-2" />
+                    <p className="text-sm font-bold text-white mb-1">
                       {item.title}
                     </p>
                     <p
                       className={`${getValueClass(
                         item.value
-                      )} font-extrabold text-gray-900 dark:text-gray-100`}
+                      )} font-extrabold text-white`}
                     >
                       {item.value}
                     </p>
@@ -273,13 +270,15 @@ export default function MallaInfo() {
                           ? "0.0"
                           : jornada.totalHoras.toFixed(1)}
                       </p>
+                      <p className="text-sm text-gray-600 dark:text-gray-300">
+                        Hora Entrada: {jornada.horaEntrada} | Hora Salida:{" "}
+                        {jornada.horaSalida}
+                      </p>
                     </div>
                     <div className="text-right">
-                      {userData?.recargosActivos === false ? null : (
-                        <p className="font-bold text-green-600">
-                          ${jornada.valorTotalDia.toLocaleString()}
-                        </p>
-                      )}
+                      <p className="font-bold text-green-600">
+                        ${jornada.valorTotalDia.toLocaleString()}
+                      </p>
                     </div>
                   </div>
                 </div>

@@ -28,12 +28,13 @@ import {
   Bolt,
   Calculator,
   Calendar,
+  CheckCheck,
   FolderArchive,
   LogOut,
   Users,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { signOut, onAuthStateChanged } from "firebase/auth";
+import { signOut, onAuthStateChanged, checkActionCode } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
 
@@ -48,6 +49,7 @@ const menuAdmin = [
 ];
 
 const menuEmpleado = [
+  { title: "Inicio Jornada", icon: CheckCheck, href: "/iniciojornada" },
   { title: "Mi jornada", icon: BarChart3, href: "/empleado" },
   { title: "Malla", icon: Calendar, href: "/malla" },
 ];

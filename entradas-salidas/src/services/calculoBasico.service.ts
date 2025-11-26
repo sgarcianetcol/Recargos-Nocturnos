@@ -88,18 +88,13 @@ export function calcularDiaBasico(
   const horas = {
     "Total Horas": h(totalMin),
     "Hora laboral ordinaria": h(baseMin),
-    "Recargo Nocturno Ordinario":
-      turno.esDominicalFestivo || !turno.recargosActivos
-        ? 0
-        : h(normalesNoctMin),
-    "Recargo Festivo Diurno":
-      turno.esDominicalFestivo && turno.recargosActivos
-        ? h(normalesDiurMin)
-        : 0,
-    "Recargo Festivo Nocturno":
-      turno.esDominicalFestivo && turno.recargosActivos
-        ? h(normalesNoctMin)
-        : 0,
+    "Recargo Nocturno Ordinario": turno.esDominicalFestivo
+      ? 0
+      : h(normalesNoctMin),
+    "Recargo Festivo Diurno": turno.esDominicalFestivo ? h(normalesDiurMin) : 0,
+    "Recargo Festivo Nocturno": turno.esDominicalFestivo
+      ? h(normalesNoctMin)
+      : 0,
     "Extras Diurnas":
       turno.esDominicalFestivo || !turno.recargosActivos ? 0 : h(extrasDiurMin),
     "Extras Nocturnas":
