@@ -87,6 +87,7 @@ export default function UsuariosTable() {
     duplicados: string[];
     errores: Array<{ row: number; email?: string; reason: string }>;
   } | null>(null);
+  const [exportData, setExportData] = React.useState<any[]>([]);
 
   // Cargar empleados al iniciar
   React.useEffect(() => {
@@ -507,27 +508,16 @@ export default function UsuariosTable() {
       const creadosData = [
         { Tipo: "✅ Empleados creados correctamente", Total: result.creados },
       ];
-      // 🔔 Mostrar las mismas alertas también si se exporta o hay duplicados/errores
-      if (
-        result.creados === 0 ||
-        result.duplicados.length > 0 ||
-        result.errores.length > 0
-      ) {
-        setAlertDialogData({
-          tipo: "info",
-          titulo: "Resultado de la importación",
-          descripcion, // <-- Aquí usamos el bloque visual que hiciste arriba
-        });
-      }
+      // 🔔 Mostrar alerta siempre después de la importación
+      setAlertDialogData({
+        tipo: "info",
+        titulo: "Resultado de la importación",
+        descripcion, // <-- Aquí usamos el bloque visual que hiciste arriba
+      });
 
       // Combinar todos los datos en una sola hoja
       const exportData = [...creadosData, ...duplicadosData, ...resumenData];
-
-      // Crear y descargar archivo
-      const ws = XLSX.utils.json_to_sheet(exportData);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Resumen Importación");
-      XLSX.writeFile(wb, "resultado_importacion.xlsx");
+      setExportData(exportData);
 
       // Refrescar lista de empleados
       setEmpleados(await EmpleadoService.listar());
@@ -566,6 +556,15 @@ export default function UsuariosTable() {
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Empleados");
     XLSX.writeFile(workbook, "Empleados.xlsx");
+  };
+
+  // Descargar resultado de importación
+  const handleDownloadImportResult = () => {
+    if (exportData.length === 0) return;
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Resumen Importación");
+    XLSX.writeFile(wb, "resultado_importacion.xlsx");
   };
 
   // Filtrado
@@ -890,6 +889,12 @@ export default function UsuariosTable() {
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
+              {exportData.length > 0 && (
+                <Button onClick={handleDownloadImportResult} variant="outline">
+                  <Download className="w-4 h-4 mr-2" />
+                  Descargar Resultado
+                </Button>
+              )}
               <AlertDialogAction onClick={() => setAlertDialogData(null)}>
                 Cerrar
               </AlertDialogAction>

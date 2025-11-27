@@ -58,6 +58,7 @@ export default async function handler(
 
     // Guardar en Firestore
     await admin.firestore().collection("usuarios").doc(userRecord.uid).set({
+      id: userRecord.uid,
       nombre,
       correo,
       documento: documento || "",

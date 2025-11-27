@@ -29,6 +29,7 @@ import {
   Calculator,
   Calendar,
   CheckCheck,
+  Clock,
   FolderArchive,
   LogOut,
   Users,
@@ -44,6 +45,7 @@ const menuAdmin = [
   { title: "Usuarios", icon: Users, href: "/usuarios" },
   { title: "Calcular", icon: Calculator, href: "/calculadora" },
   { title: "Cálculo masivo", icon: Calculator, href: "/calculoMasivo" },
+  { title: "Control empleados", icon: Clock, href: "/controlempleados" },
   { title: "Malla Empleados", icon: FolderArchive, href: "/MallaEmpleados" },
   { title: "Configuración", icon: Bolt, href: "/configuracion" },
 ];

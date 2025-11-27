@@ -58,6 +58,7 @@ const MONTH_NAMES = [
 const LOCAL_STORAGE_KEY = "malla_empleados_workbook";
 const LOCAL_STORAGE_FILENAME_KEY = "malla_empleados_filename";
 const LOCAL_STORAGE_CHANGES_KEY = "malla_changes";
+const LOCAL_STORAGE_UPLOAD_TIMESTAMP_KEY = "malla_empleados_upload_timestamp";
 
 // --- Funciones de Serialización/Deserialización ---
 // Convierte WorkBook a Base64 para guardarlo en localStorage
@@ -109,6 +110,7 @@ export default function MallaEmpleadosPage() {
   const [processing, setProcessing] = React.useState(false);
   const [year, setYear] = React.useState<number>(new Date().getFullYear());
   const [fileName, setFileName] = React.useState<string>("");
+  const [uploadTimestamp, setUploadTimestamp] = React.useState<string>("");
 
   // Estado para meses seleccionados para guardar
   const [selectedMonths, setSelectedMonths] = React.useState<number[]>([]);
@@ -139,9 +141,15 @@ export default function MallaEmpleadosPage() {
 
     const savedBase64 = localStorage.getItem(LOCAL_STORAGE_KEY);
     const savedFileName = localStorage.getItem(LOCAL_STORAGE_FILENAME_KEY);
+    const savedTimestamp = localStorage.getItem(
+      LOCAL_STORAGE_UPLOAD_TIMESTAMP_KEY
+    );
 
     // Cargar filename siempre si existe
     if (savedFileName) setFileName(savedFileName);
+
+    // Cargar timestamp si existe
+    if (savedTimestamp) setUploadTimestamp(savedTimestamp);
 
     if (savedBase64) {
       try {
@@ -188,6 +196,10 @@ export default function MallaEmpleadosPage() {
 
     // ✅ Guardar filename siempre
     localStorage.setItem(LOCAL_STORAGE_FILENAME_KEY, file.name);
+
+    // ✅ Guardar timestamp de subida
+    const uploadTimestamp = new Date().toISOString();
+    localStorage.setItem(LOCAL_STORAGE_UPLOAD_TIMESTAMP_KEY, uploadTimestamp);
 
     // ✅ Guardar workbook si es posible
     try {
@@ -308,8 +320,11 @@ export default function MallaEmpleadosPage() {
 
     console.log("[PREVIEW] Cantidad de empleados ingresada:", numEmpleados);
 
-    const empleadosList: { nombre: string; documento?: string; row?: number }[] =
-      [];
+    const empleadosList: {
+      nombre: string;
+      documento?: string;
+      row?: number;
+    }[] = [];
 
     for (let i = 0; i < numEmpleados; i++) {
       const rowExcel = 4 + i; // B4, C4...
@@ -747,6 +762,7 @@ export default function MallaEmpleadosPage() {
       // Limpiar localStorage
       localStorage.removeItem(LOCAL_STORAGE_KEY);
       localStorage.removeItem(LOCAL_STORAGE_FILENAME_KEY);
+      localStorage.removeItem(LOCAL_STORAGE_UPLOAD_TIMESTAMP_KEY);
 
       // Resetear estado
       setWorkbook(null);

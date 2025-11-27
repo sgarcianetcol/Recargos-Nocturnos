@@ -262,7 +262,6 @@ export default function DashboardAdmin() {
                 </CardContent>
               </Card>
             </div>
-
             {/* KPIs adicionales */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <Card>
@@ -334,7 +333,6 @@ export default function DashboardAdmin() {
                 </CardContent>
               </Card>
             </div>
-
             {/* Gráfica */}
             <div className="grid grid-cols-1">
               <Card>
@@ -349,7 +347,6 @@ export default function DashboardAdmin() {
                 </CardContent>
               </Card>
             </div>
-
             {/* Actividad reciente */}
             <Card>
               <CardHeader>
