@@ -268,9 +268,14 @@ export async function listarJornadasActivas(): Promise<JornadaActiva[]> {
 
     const jornadas: JornadaActiva[] = [];
     querySnapshot.forEach((doc) => {
-      const jornada = doc.data() as JornadaActiva;
-      if (jornada.estado === "activa") {
-        jornadas.push(jornada);
+      const data = doc.data() as any;
+
+      if (data.estado === "activa") {
+        jornadas.push({
+          ...data,
+          horaInicio: data.horaInicio?.toDate() ?? null,
+          horaFin: data.horaFin?.toDate() ?? null,
+        });
       }
     });
 
@@ -291,8 +296,13 @@ export async function listarTodasLasJornadas(): Promise<JornadaActiva[]> {
 
     const jornadas: JornadaActiva[] = [];
     querySnapshot.forEach((doc) => {
-      const jornada = doc.data() as JornadaActiva;
-      jornadas.push(jornada);
+      const data = doc.data() as any;
+
+      jornadas.push({
+        ...data,
+        horaInicio: data.horaInicio?.toDate() ?? null,
+        horaFin: data.horaFin?.toDate() ?? null,
+      });
     });
 
     // Ordenar por fecha descendente (más recientes primero)

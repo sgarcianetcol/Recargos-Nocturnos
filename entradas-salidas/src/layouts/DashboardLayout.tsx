@@ -22,6 +22,8 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
+  SidebarTrigger,
+  SidebarInset,
 } from "@/components/ui/sidebar";
 import {
   BarChart3,
@@ -51,8 +53,8 @@ const menuAdmin = [
 ];
 
 const menuEmpleado = [
-  { title: "Inicio Jornada", icon: CheckCheck, href: "/iniciojornada" },
   { title: "Mi jornada", icon: BarChart3, href: "/empleado" },
+  { title: "Inicio Jornada", icon: CheckCheck, href: "/iniciojornada" },
   { title: "Malla", icon: Calendar, href: "/malla" },
 ];
 
@@ -190,9 +192,18 @@ export default function DashboardLayout({
           </div>
         </Sidebar>
 
-        <main className="flex-1 p-6 bg-gray-50 dark:bg-gray-900">
-          {children}
-        </main>
+        <SidebarInset>
+          <header className="flex h-16 items-center gap-4 border-b px-6">
+            <SidebarTrigger />
+            <div>
+              <h1 className="text-2xl font-bold">Dashboard</h1>
+              <p className="text-sm text-gray-600">Panel de control</p>
+            </div>
+          </header>
+          <main className="flex-1 p-6 bg-gray-50 dark:bg-gray-900">
+            {children}
+          </main>
+        </SidebarInset>
       </div>
     </SidebarProvider>
   );
