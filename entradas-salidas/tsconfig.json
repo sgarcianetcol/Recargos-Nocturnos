@@ -28,7 +28,7 @@
     "**/*.ts",
     "**/*.tsx",
     "src/pages/index.tsxz"
-  ],
+, "next.config.js"  ],
   "exclude": [
     "node_modules"
   ]
