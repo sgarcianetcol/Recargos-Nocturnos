@@ -60,6 +60,18 @@ export default function InicioJornadaView() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
+  // Estados para permisos
+  const [mostrarDialogPermisos, setMostrarDialogPermisos] = useState(false);
+  const [permisoDenegado, setPermisoDenegado] = useState<
+    "ubicacion" | "camara" | null
+  >(null);
+  const [tipoAccionPermiso, setTipoAccionPermiso] = useState<
+    "inicio" | "fin" | null
+  >(null);
+  const [accionPendiente, setAccionPendiente] = useState<
+    "inicio" | "fin" | null
+  >(null);
+
   // Funciones de cámara
   const iniciarCamara = async () => {
     try {
@@ -161,23 +173,78 @@ export default function InicioJornadaView() {
     cargarDatos();
   }, [user]);
 
+  const verificarPermisos = async (
+    mostrarDialog: boolean = true
+  ): Promise<boolean> => {
+    try {
+      // Intentar acceder directamente a la ubicación (esto activa el prompt del navegador)
+      await obtenerUbicacionActual();
+
+      // Intentar acceder directamente a la cámara (esto activa el prompt del navegador)
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user" },
+        audio: false,
+      });
+      // Liberar el stream inmediatamente después de verificar
+      stream.getTracks().forEach((track) => track.stop());
+
+      return true;
+    } catch (error) {
+      console.error("Error accediendo a permisos:", error);
+
+      // Determinar qué permiso falló basado en el mensaje de error
+      const errorMessage = error instanceof Error ? error.message : "";
+      const isLocationError =
+        errorMessage.includes("geolocation") ||
+        errorMessage.includes("ubicación") ||
+        errorMessage.includes("location");
+
+      if (mostrarDialog) {
+        if (isLocationError) {
+          setPermisoDenegado("ubicacion");
+        } else {
+          // Asumir que es error de cámara si no es ubicación
+          setPermisoDenegado("camara");
+        }
+        setMostrarDialogPermisos(true);
+      }
+
+      return false;
+    }
+  };
+
   const manejarInicioJornada = async () => {
     if (!user || !empleado || !turnoId) {
       setMensaje("Datos incompletos para iniciar jornada");
       return;
     }
 
-    try {
-      // Verificar permisos de ubicación primero
-      await obtenerUbicacionActual();
+    // Verificar si el turno es de descanso
+    if (turnoId === "D") {
+      setMensaje("No puedes iniciar jornada en un día de descanso");
+      return;
+    }
 
-      // Mostrar cámara para captura de foto
+    try {
+      // Verificar permisos antes de proceder
+      const permisosOk = await verificarPermisos();
+      if (!permisosOk) {
+        setAccionPendiente("inicio");
+        return;
+      }
+
+      // Los permisos ya fueron verificados, proceder directamente
       setTipoAccion("inicio");
       setMostrarCamara(true);
       await iniciarCamara();
     } catch (error) {
       console.error("Error preparando inicio de jornada:", error);
-      setMensaje(error instanceof Error ? error.message : "Error desconocido");
+      // No mostrar mensaje de error si ya se mostró el diálogo de permisos
+      if (!mostrarDialogPermisos) {
+        setMensaje(
+          error instanceof Error ? error.message : "Error desconocido"
+        );
+      }
     }
   };
 
@@ -188,16 +255,25 @@ export default function InicioJornadaView() {
     }
 
     try {
-      // Verificar permisos de ubicación primero
-      await obtenerUbicacionActual();
+      // Verificar permisos antes de proceder
+      const permisosOk = await verificarPermisos();
+      if (!permisosOk) {
+        setAccionPendiente("fin");
+        return;
+      }
 
-      // Mostrar cámara para captura de foto
+      // Los permisos ya fueron verificados, proceder directamente
       setTipoAccion("fin");
       setMostrarCamara(true);
       await iniciarCamara();
     } catch (error) {
       console.error("Error preparando fin de jornada:", error);
-      setMensaje(error instanceof Error ? error.message : "Error desconocido");
+      // No mostrar mensaje de error si ya se mostró el diálogo de permisos
+      if (!mostrarDialogPermisos) {
+        setMensaje(
+          error instanceof Error ? error.message : "Error desconocido"
+        );
+      }
     }
   };
 
@@ -259,6 +335,26 @@ export default function InicioJornadaView() {
       minute: "2-digit",
       second: "2-digit",
     });
+  };
+
+  const manejarReintentarPermisos = async () => {
+    const permisosOk = await verificarPermisos();
+    if (permisosOk && accionPendiente) {
+      if (accionPendiente === "inicio") {
+        await manejarInicioJornada();
+      } else if (accionPendiente === "fin") {
+        await manejarFinJornada();
+      }
+      setAccionPendiente(null);
+      setMostrarDialogPermisos(false);
+    }
+  };
+
+  const cerrarDialogPermisos = () => {
+    setMostrarDialogPermisos(false);
+    setPermisoDenegado(null);
+    setTipoAccionPermiso(null);
+    setAccionPendiente(null);
   };
 
   return (
@@ -404,21 +500,68 @@ export default function InicioJornadaView() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Diálogo de permisos */}
+      <AlertDialog
+        open={mostrarDialogPermisos}
+        onOpenChange={cerrarDialogPermisos}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <XCircle className="w-5 h-5 text-red-500" />
+              Permiso Denegado
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {permisoDenegado === "camara"
+                ? "La cámara está desactivada. Necesitas activar los permisos de cámara para iniciar o finalizar la jornada."
+                : "La ubicación está desactivada. Necesitas activar los permisos de ubicación para iniciar o finalizar la jornada."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={cerrarDialogPermisos}>
+              Cancelar
+            </AlertDialogAction>
+            <AlertDialogAction onClick={manejarReintentarPermisos}>
+              Reintentar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Botones de acción */}
       <Card>
         <CardHeader>
           <CardTitle>Acciones</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {estado === "no_iniciada" && (
+          {estado === "no_iniciada" && turnoId === "D" && (
+            <div className="text-center py-4">
+              <CheckCircle className="w-12 h-12 text-blue-500 mx-auto mb-2" />
+              <p className="text-blue-700 font-medium">Día de descanso</p>
+              <p className="text-sm text-gray-600">
+                Hoy tienes turno de descanso. ¡Disfruta tu día libre!
+              </p>
+            </div>
+          )}
+
+          {estado === "no_iniciada" && turnoId && turnoId !== "D" && (
             <Button
               onClick={manejarInicioJornada}
-              disabled={cargando || !turnoId}
+              disabled={cargando}
               className="w-full flex items-center gap-2 h-12"
             >
               <Camera className="w-5 h-5" />
               {cargando ? "Iniciando..." : "Iniciar Jornada"}
             </Button>
+          )}
+
+          {estado === "no_iniciada" && !turnoId && (
+            <div className="text-center py-4">
+              <XCircle className="w-12 h-12 text-orange-500 mx-auto mb-2" />
+              <p className="text-orange-700 font-medium">
+                No tienes turno asignado para hoy
+              </p>
+            </div>
           )}
 
           {estado === "activa" && (
@@ -439,15 +582,6 @@ export default function InicioJornadaView() {
               <p className="text-green-700 font-medium">Jornada completada</p>
               <p className="text-sm text-gray-600">
                 Puedes iniciar una nueva jornada mañana
-              </p>
-            </div>
-          )}
-
-          {!turnoId && estado === "no_iniciada" && (
-            <div className="text-center py-4">
-              <XCircle className="w-12 h-12 text-orange-500 mx-auto mb-2" />
-              <p className="text-orange-700 font-medium">
-                No tienes turno asignado para hoy
               </p>
             </div>
           )}
