@@ -1,24 +1,24 @@
-# Imagen base
+# Usa la imagen oficial de Node
 FROM node:20-slim
 
 # Directorio de trabajo
 WORKDIR /app
 
-# Copiar package.json y lock
+# Copiar package.json y package-lock.json
 COPY package*.json ./
 
-# Instalar dependencias
-RUN npm install --production
+# Instalar todas las dependencias (incluyendo devDependencies)
+RUN npm install
 
-# Copiar código
+# Copiar el resto del proyecto
 COPY . .
 
-# Construir Next.js
+# Construir la app
 RUN npm run build
 
-# Exponer puerto
+# Exponer el puerto que usará Cloud Run
 EXPOSE 8080
 ENV PORT=8080
 
-# Ejecutar Next.js
+# Comando de inicio
 CMD ["npm", "start"]
