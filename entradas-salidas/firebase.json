@@ -2,7 +2,7 @@
   "apphosting": [
     {
       "backendId": "controlpersonal",
-      "rootDir": "build",
+      "rootDir": ".",
       "ignore": [
         "node_modules",
         ".git",
