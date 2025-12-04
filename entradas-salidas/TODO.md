@@ -1,25 +1,43 @@
-# TODO - Implementar Alerta de Permisos para Jornada
+# TODO: Agregar Sistema de Filtrado en Resumen de Horas
 
-## Tareas Completadas
+## Estado Actual
 
-- [x] Agregar estado `tipoAccionPermiso` para rastrear la acción intentada
-- [x] Modificar función `verificarPermisos` para mostrar diálogo cuando permisos están denegados
-- [x] Remover función `solicitarPermisoAutomatico` innecesaria
-- [x] Agregar diálogo de permisos en la sección de render con mensaje claro
+- El componente `mallaadmin.tsx` muestra un resumen de horas por empleado para el mes seleccionado.
+- La sección "Resumen de Horas" lista todos los empleados con sus horas totales y un total general.
 
-## Descripción de Cambios
+## Plan de Implementación
 
-- Se agregó un diálogo modal que aparece cuando el empleado intenta iniciar o finalizar jornada y tiene la cámara o ubicación desactivada.
-- El diálogo informa al empleado que debe activar el permiso correspondiente en la configuración del navegador para proceder.
-- El diálogo se muestra con un título "Permiso Requerido" y una descripción específica según el permiso faltante (cámara o ubicación) y la acción (iniciar o finalizar jornada).
-- El botón de acción es "Entendido" para cerrar el diálogo.
+1. **Agregar Estados para Filtros**
 
-## Archivos Modificados
+   - Estado para término de búsqueda (nombre/documento)
+   - Estado para rango de horas mínimo
+   - Estado para rango de horas máximo
+   - Estado para mostrar solo empleados con horas asignadas
 
-- `entradas-salidas/src/components/dashboard/empleado/iniciojornada.tsx`
+2. **Crear UI de Filtros**
 
-## Pruebas Pendientes
+   - Agregar una sección de filtros arriba del resumen
+   - Campos de entrada para búsqueda, min/max horas
+   - Checkbox para "Mostrar solo con horas"
 
-- Verificar que el diálogo aparezca correctamente cuando se intenta iniciar jornada sin permisos de cámara o ubicación.
-- Verificar que el diálogo aparezca correctamente cuando se intenta finalizar jornada sin permisos de cámara o ubicación.
-- Confirmar que el diálogo no impide otras funcionalidades de la aplicación.
+3. **Implementar Lógica de Filtrado**
+
+   - Crear función para filtrar la lista de horasPorEmpleado
+   - Aplicar filtros: búsqueda, rango de horas, solo con horas
+   - Calcular total basado en lista filtrada
+
+4. **Actualizar Display**
+   - Mostrar lista filtrada en lugar de la completa
+   - Actualizar total general con el filtrado
+   - Agregar indicador de cantidad de empleados mostrados
+
+## Archivos a Modificar
+
+- `entradas-salidas/src/components/dashboard/Malla/mallaadmin.tsx`
+
+## Próximos Pasos
+
+- Implementar estados de filtros
+- Crear UI de filtros
+- Implementar lógica de filtrado
+- Actualizar cálculos y display
