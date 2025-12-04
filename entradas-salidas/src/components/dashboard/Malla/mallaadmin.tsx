@@ -73,7 +73,6 @@ function base64ToWorkbook(base64: string): XLSX.WorkBook {
   return wb;
 }
 
-
 type PreviewCell = {
   day: number;
   turno: string | null;
@@ -124,7 +123,14 @@ export default function MallaEmpleadosPage() {
   const [horasPorEmpleado, setHorasPorEmpleado] = React.useState<
     { nombre: string; documento?: string; horasTotales: number }[]
   >([]);
-  const [totalHorasTodos, setTotalHorasTodos] = React.useState(0);
+
+  // Estados para filtros del resumen de horas
+  const [fechaDesde, setFechaDesde] = React.useState<string>("");
+  const [fechaHasta, setFechaHasta] = React.useState<string>("");
+  const [searchTerm, setSearchTerm] = React.useState("");
+  const [minHours, setMinHours] = React.useState<number | "">("");
+  const [maxHours, setMaxHours] = React.useState<number | "">("");
+  const [onlyWithHours, setOnlyWithHours] = React.useState(false);
 
   // Función para mostrar mensajes
   const showMessage = React.useCallback(
@@ -187,12 +193,21 @@ export default function MallaEmpleadosPage() {
       documento?: string;
       horasTotales: number;
     }[] = [];
-    let totalGeneral = 0;
 
     previewRows.forEach((row) => {
       let horasEmpleado = 0;
 
       row.cells.forEach((cell) => {
+        // Aplicar filtro de fechas si está configurado
+        if (fechaDesde || fechaHasta) {
+          const fechaDia = new Date(year, mesSeleccionado, cell.day);
+          const fechaDesdeDate = fechaDesde ? new Date(fechaDesde) : null;
+          const fechaHastaDate = fechaHasta ? new Date(fechaHasta) : null;
+
+          if (fechaDesdeDate && fechaDia < fechaDesdeDate) return;
+          if (fechaHastaDate && fechaDia > fechaHastaDate) return;
+        }
+
         if (cell.turno && cell.turno !== "D") {
           // Buscar el turno en los turnos predeterminados
           const turnoEncontrado = TURNOS_PREDETERMINADOS.find(
@@ -209,13 +224,10 @@ export default function MallaEmpleadosPage() {
         documento: row.documento,
         horasTotales: horasEmpleado,
       });
-
-      totalGeneral += horasEmpleado;
     });
 
     setHorasPorEmpleado(resumen);
-    setTotalHorasTodos(totalGeneral);
-  }, [previewRows]);
+  }, [previewRows, fechaDesde, fechaHasta, year, mesSeleccionado]);
 
   // Calcular horas cuando cambian las filas del preview
   React.useEffect(() => {
@@ -223,6 +235,38 @@ export default function MallaEmpleadosPage() {
       calcularHorasPorEmpleado();
     }
   }, [previewRows, calcularHorasPorEmpleado]);
+
+  // Filtrar horas por empleado basado en los filtros
+  const filteredHorasPorEmpleado = React.useMemo(() => {
+    return horasPorEmpleado.filter((emp) => {
+      // Filtro de búsqueda
+      if (searchTerm) {
+        const searchLower = searchTerm.toLowerCase();
+        const matchesName = emp.nombre.toLowerCase().includes(searchLower);
+        const matchesDoc = emp.documento?.toLowerCase().includes(searchLower);
+        if (!matchesName && !matchesDoc) return false;
+      }
+
+      // Filtro de horas mínimas
+      if (minHours !== "" && emp.horasTotales < minHours) return false;
+
+      // Filtro de horas máximas
+      if (maxHours !== "" && emp.horasTotales > maxHours) return false;
+
+      // Filtro de solo con horas
+      if (onlyWithHours && emp.horasTotales === 0) return false;
+
+      return true;
+    });
+  }, [horasPorEmpleado, searchTerm, minHours, maxHours, onlyWithHours]);
+
+  // Calcular total de horas filtradas
+  const totalHorasFiltradas = React.useMemo(() => {
+    return filteredHorasPorEmpleado.reduce(
+      (total, emp) => total + emp.horasTotales,
+      0
+    );
+  }, [filteredHorasPorEmpleado]);
 
   // Manejar archivo (ahora guarda en localStorage)
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1125,9 +1169,126 @@ export default function MallaEmpleadosPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
+            {/* Filtros */}
+            <div className="space-y-4 mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="text-sm font-medium mb-2 block">
+                    Fecha desde
+                  </label>
+                  <Input
+                    type="date"
+                    value={fechaDesde}
+                    onChange={(e) => setFechaDesde(e.target.value)}
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-2 block">
+                    Fecha hasta
+                  </label>
+                  <Input
+                    type="date"
+                    value={fechaHasta}
+                    onChange={(e) => setFechaHasta(e.target.value)}
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-2 block">
+                    Buscar por nombre o documento
+                  </label>
+                  <Input
+                    type="text"
+                    placeholder="Buscar..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="text-sm font-medium mb-2 block">
+                    Horas mínimas
+                  </label>
+                  <Input
+                    type="number"
+                    placeholder="Min"
+                    value={minHours}
+                    onChange={(e) =>
+                      setMinHours(
+                        e.target.value === "" ? "" : Number(e.target.value)
+                      )
+                    }
+                    className="w-full"
+                    min="0"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-2 block">
+                    Horas máximas
+                  </label>
+                  <Input
+                    type="number"
+                    placeholder="Max"
+                    value={maxHours}
+                    onChange={(e) =>
+                      setMaxHours(
+                        e.target.value === "" ? "" : Number(e.target.value)
+                      )
+                    }
+                    className="w-full"
+                    min="0"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={onlyWithHours}
+                      onChange={(e) => setOnlyWithHours(e.target.checked)}
+                      className="rounded"
+                    />
+                    <span className="text-sm font-medium">
+                      Solo con horas asignadas
+                    </span>
+                  </label>
+                </div>
+                <div className="flex items-end">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setFechaDesde("");
+                      setFechaHasta("");
+                      setSearchTerm("");
+                      setMinHours("");
+                      setMaxHours("");
+                      setOnlyWithHours(false);
+                    }}
+                    className="w-full"
+                  >
+                    Limpiar filtros
+                  </Button>
+                </div>
+              </div>
+              {(fechaDesde ||
+                fechaHasta ||
+                searchTerm ||
+                minHours !== "" ||
+                maxHours !== "" ||
+                onlyWithHours) && (
+                <div className="text-sm text-gray-600">
+                  Mostrando {filteredHorasPorEmpleado.length} de{" "}
+                  {horasPorEmpleado.length} empleados
+                </div>
+              )}
+            </div>
+
             <div className="space-y-4">
               <div className="grid gap-2">
-                {horasPorEmpleado.map((emp, index) => (
+                {filteredHorasPorEmpleado.map((emp, index) => (
                   <div
                     key={index}
                     className="flex justify-between items-center p-3 bg-gray-50 rounded-lg"
@@ -1149,13 +1310,13 @@ export default function MallaEmpleadosPage() {
               <Separator />
               <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
                 <span className="font-bold text-lg">
-                  Total de todos los empleados
+                  Total de empleados mostrados
                 </span>
                 <Badge
                   variant="default"
                   className="text-xl px-4 py-2 bg-blue-600"
                 >
-                  {totalHorasTodos} horas
+                  {totalHorasFiltradas} horas
                 </Badge>
               </div>
             </div>
