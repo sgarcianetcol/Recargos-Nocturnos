@@ -37,7 +37,7 @@ import {
   Users,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { signOut, onAuthStateChanged, checkActionCode } from "firebase/auth";
+import { signOut, onAuthStateChanged, } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
 

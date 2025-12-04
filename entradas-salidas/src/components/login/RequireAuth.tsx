@@ -1,7 +1,7 @@
 // src/components/RequireAuth.tsx
 import { ReactNode, useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import { onAuthStateChanged, User } from "firebase/auth";
+import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 
 type Props = { children: ReactNode };

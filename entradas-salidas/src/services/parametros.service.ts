@@ -10,6 +10,13 @@ const NOMINA_REF = doc(db, "config", "nomina");
 const RECARGOS_REF = doc(db, "config", "recargos");
 const RULES_REF = doc(db, "config", "rules");
 
+// Tipo flexible pero sin usar 'any'
+export type ParametrosConfig = {
+  nomina?: unknown;
+  recargos?: unknown;
+  rules?: unknown;
+};
+
 export async function getParametros() {
   const [nominaSnap, recargosSnap, rulesSnap] = await Promise.all([
     getDoc(NOMINA_REF),
@@ -24,7 +31,7 @@ export async function getParametros() {
   };
 }
 
-export async function actualizarParametros(parametros: any) {
+export async function actualizarParametros(parametros: ParametrosConfig) {
   await Promise.all([
     setDoc(NOMINA_REF, parametros.nomina ?? {}, { merge: true }),
     setDoc(RECARGOS_REF, parametros.recargos ?? {}, { merge: true }),

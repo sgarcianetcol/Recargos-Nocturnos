@@ -5,11 +5,9 @@ import {
   Timestamp,
   setDoc,
   collection,
-  collectionGroup,
   getDocs,
   query,
   where,
-  deleteDoc,
 } from "firebase/firestore";
 import { getDoc } from "firebase/firestore";
 import { EmpleadoService } from "@/services/usuariosService";
@@ -82,7 +80,7 @@ export class MallaService {
     const endYear = fin.getFullYear();
     const endMonth = fin.getMonth();
 
-    const results: any[] = [];
+    const results: unknown[] = [];
 
     for (let year = startYear; year <= endYear; year++) {
       const monthStart = year === startYear ? startMonth : 0;

@@ -15,18 +15,13 @@ import {
   limit,
   DocumentData,
 } from "firebase/firestore";
-import {
-  getAuth,
-  createUserWithEmailAndPassword,
-  sendPasswordResetEmail,
-} from "firebase/auth";
 import type { Empleado } from "@/models/usuarios.model";
 
 /* ===========================
    Utils
 =========================== */
-function omitUndefined<T extends Record<string, any>>(obj: T): T {
-  const out: Record<string, any> = {};
+function omitUndefined<T extends Record<string, unknown>>(obj: T): T {
+  const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(obj)) {
     if (v !== undefined) out[k] = v;
   }
@@ -163,10 +158,10 @@ export const EmpleadoService = {
   },
 
   async actualizar(id: string, parciales: Partial<Empleado>): Promise<void> {
-    const payload: Record<string, any> = { ...parciales };
+    const payload: Record<string, unknown> = { ...parciales };
 
     if ("salarioBaseMensual" in payload) {
-      const raw = payload.salarioBaseMensual as any;
+      const raw = payload.salarioBaseMensual as unknown;
       if (raw === "" || raw === null || raw === undefined) {
         delete payload.salarioBaseMensual;
       } else {

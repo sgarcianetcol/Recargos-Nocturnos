@@ -6,14 +6,20 @@ import nodemailer from "nodemailer";
 // Inicializar Firebase Admin solo una vez
 
 if (!admin.apps.length) {
-  if (!process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL || !process.env.FIREBASE_PRIVATE_KEY) {
-    throw new Error("Faltan variables de entorno para Firebase Admin SDK. Por favor configura FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL y FIREBASE_PRIVATE_KEY en .env.local");
+  if (
+    !process.env.FIREBASE_PROJECT_ID ||
+    !process.env.FIREBASE_CLIENT_EMAIL ||
+    !process.env.FIREBASE_PRIVATE_KEY
+  ) {
+    throw new Error(
+      "Faltan variables de entorno para Firebase Admin SDK. Por favor configura FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL y FIREBASE_PRIVATE_KEY en .env.local"
+    );
   }
 
   const credentialConfig = {
     projectId: process.env.FIREBASE_PROJECT_ID,
     clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-    privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+    privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
   };
 
   admin.initializeApp({
@@ -39,8 +45,15 @@ export default async function handler(
   }
 
   try {
-    const { nombre, correo, documento, rol, empresa, activo, salarioBaseMensual } =
-      req.body;
+    const {
+      nombre,
+      correo,
+      documento,
+      rol,
+      empresa,
+      activo,
+      salarioBaseMensual,
+    } = req.body;
 
     if (!nombre || !correo || !salarioBaseMensual || salarioBaseMensual <= 0) {
       return res
@@ -57,17 +70,21 @@ export default async function handler(
     });
 
     // Guardar en Firestore
-    await admin.firestore().collection("usuarios").doc(userRecord.uid).set({
-      id: userRecord.uid,
-      nombre,
-      correo,
-      documento: documento || "",
-      rol: rol || "empleado",
-      empresa: empresa || "NETCOL",
-      activo: activo !== false,
-      salarioBaseMensual: Number(salarioBaseMensual),
-      creadoEn: admin.firestore.FieldValue.serverTimestamp(),
-    });
+    await admin
+      .firestore()
+      .collection("usuarios")
+      .doc(userRecord.uid)
+      .set({
+        id: userRecord.uid,
+        nombre,
+        correo,
+        documento: documento || "",
+        rol: rol || "empleado",
+        empresa: empresa || "NETCOL",
+        activo: activo !== false,
+        salarioBaseMensual: Number(salarioBaseMensual),
+        creadoEn: admin.firestore.FieldValue.serverTimestamp(),
+      });
 
     // Enlace para definir contraseña
     const resetLink = await admin.auth().generatePasswordResetLink(correo);
@@ -104,13 +121,21 @@ export default async function handler(
       uid: userRecord.uid,
       message: "Empleado creado exitosamente y correo enviado.",
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error creando empleado:", error);
 
     let message = "Error interno del servidor";
-    if (error.code === "auth/email-already-exists") message = "El correo ya está registrado";
-    if (error.code === "auth/invalid-email") message = "Correo inválido";
 
-    res.status(500).json({ error: message });
+    if (typeof error === "object" && error !== null) {
+      const maybeErr = error as Record<string, unknown>;
+      const code =
+        typeof maybeErr.code === "string" ? maybeErr.code : undefined;
+
+      if (code === "auth/email-already-exists")
+        message = "El correo ya está registrado";
+      if (code === "auth/invalid-email") message = "Correo inválido";
+    }
+
+    return res.status(500).json({ error: message });
   }
 }

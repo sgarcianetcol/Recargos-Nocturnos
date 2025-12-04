@@ -1,4 +1,5 @@
 import type { Empleado } from "@/models/usuarios.model";
+import type { Timestamp, FieldValue } from "firebase/firestore";
 
 export type Empresa = Empleado["empresa"];
 
@@ -11,7 +12,7 @@ export interface JornadaDoc {
 
   fecha: string; // "YYYY-MM-DD"
   turnoId: string; // "M8" | "T8" | ...
-  finalizadoEn?: any;
+  finalizadoEn?: Timestamp | null;
   horaEntrada: string; // "HH:mm"
   horaSalida: string; // "HH:mm"
   cruzoMedianoche: boolean;
@@ -20,8 +21,8 @@ export interface JornadaDoc {
   ubicacion?: string | null; // ✅ aquí se guarda "lat,lng"
 
   // Horas reales (opcionales, para jornadas automáticas)
-  horaInicioReal?: any;
-  horaFinReal?: any;
+  horaInicioReal?: Timestamp | null;
+  horaFinReal?: Timestamp | null;
   ubicacionInicio?: { lat: number; lng: number };
   ubicacionFin?: { lat: number; lng: number };
   historial?: Array<{
@@ -68,7 +69,7 @@ export interface JornadaDoc {
   valorExtrasNocturnasDominical: number;
   valorTotalDia: number;
 
-  creadoEn: any; // serverTimestamp
+  creadoEn: Timestamp | FieldValue | null;
   estado: "calculado" | "cerrado" | "pendiente";
 }
 

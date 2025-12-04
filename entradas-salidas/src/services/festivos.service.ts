@@ -47,5 +47,6 @@ export async function cachearFestivosAnio(anio: number) {
   // This function would cache holidays for the year, but since we're using date-holidays,
   // it might not need implementation if holidays are computed on the fly.
   // For now, just return a resolved promise.
+  console.log(`Cacheando festivos para el año ${anio}`);
   return Promise.resolve();
 }

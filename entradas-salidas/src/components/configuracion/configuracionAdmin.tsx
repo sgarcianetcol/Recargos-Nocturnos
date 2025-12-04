@@ -54,16 +54,16 @@ import {
   getParametros,
   actualizarParametros,
 } from "@/services/parametros.service";
-import { MallaService } from "@/services/malla.service";
+//import { MallaService } from "@/services/malla.service";
 import {
-  eliminarJornada,
-  crearJornadaCalculada,
+  //eliminarJornada,
+  //crearJornadaCalculada,
   listarJornadasPorUsuarioRango,
   actualizarJornada,
 } from "@/services/jornada.service";
 import { ConfigNominaService } from "@/services/config.service";
 import { calcularDiaBasico } from "@/services/calculoBasico.service";
-import { esDominicalOFestivo } from "@/services/festivos.service";
+//import { esDominicalOFestivo } from "@/services/festivos.service";
 import { JornadaDoc } from "@/models/jornada.model";
 
 // Tipos
@@ -175,7 +175,7 @@ export default function ConfiguracionAdmin() {
 
   const cargarTodosDatos = useCallback(async () => {
     await Promise.all([cargarUsuarios(), cargarFestivos(), cargarParametros()]);
-  }, []);
+  }, [cargarFestivos, cargarParametros, cargarUsuarios]);
 
   // Cargar datos iniciales
   useEffect(() => {
@@ -295,20 +295,6 @@ export default function ConfiguracionAdmin() {
     } catch (err) {
       console.error("Error eliminando usuario:", err);
       mostrarMensaje("error", "Error al eliminar usuario");
-    }
-  };
-
-  const handleToggleActivarUsuario = async (usuario: Empleado) => {
-    try {
-      await EmpleadoService.activar(usuario.id, !usuario.activo);
-      mostrarMensaje(
-        "exito",
-        `Usuario ${!usuario.activo ? "activado" : "desactivado"}`
-      );
-      await cargarUsuarios();
-    } catch (err) {
-      console.error("Error toggle activo:", err);
-      mostrarMensaje("error", "Error al cambiar estado del usuario");
     }
   };
 
@@ -449,77 +435,78 @@ export default function ConfiguracionAdmin() {
           );
 
           // Actualizar jornada existente con los nuevos valores calculados
+          // --- Antes de armar updateData, fuerza el tipo esperado ---
+          const horas = calc.horas as Record<string, number> | undefined;
+          const valores = calc.valores as Record<string, number> | undefined;
+
+          // Actualizar jornada existente con los nuevos valores calculados
           const updateData: Partial<JornadaDoc> = {
             // Horas recalculadas
             recargoNocturnoOrdinario:
               jornada.turnoId === "D"
                 ? 0
-                : calc.horas?.["Recargo Nocturno Ordinario"] ?? 0,
+                : horas?.["Recargo Nocturno Ordinario"] ?? 0,
             recargoFestivoDiurno:
               jornada.turnoId === "D"
                 ? 0
-                : calc.horas?.["Recargo Festivo Diurno"] ?? 0,
+                : horas?.["Recargo Festivo Diurno"] ?? 0,
             recargoFestivoNocturno:
               jornada.turnoId === "D"
                 ? 0
-                : calc.horas?.["Recargo Festivo Nocturno"] ?? 0,
+                : horas?.["Recargo Festivo Nocturno"] ?? 0,
             extrasDiurnas:
-              jornada.turnoId === "D" ? 0 : calc.horas?.["Extras Diurnas"] ?? 0,
+              jornada.turnoId === "D" ? 0 : horas?.["Extras Diurnas"] ?? 0,
             extrasNocturnas:
-              jornada.turnoId === "D"
-                ? 0
-                : calc.horas?.["Extras Nocturnas"] ?? 0,
+              jornada.turnoId === "D" ? 0 : horas?.["Extras Nocturnas"] ?? 0,
             extrasDiurnasDominical:
               jornada.turnoId === "D"
                 ? 0
-                : calc.horas?.["Extras Diurnas Dominical"] ?? 0,
+                : horas?.["Extras Diurnas Dominical"] ?? 0,
             extrasNocturnasDominical:
               jornada.turnoId === "D"
                 ? 0
-                : calc.horas?.["Extras Nocturnas Dominical"] ?? 0,
+                : horas?.["Extras Nocturnas Dominical"] ?? 0,
             horasExtras:
               jornada.turnoId === "D"
                 ? 0
-                : (calc.horas?.["Extras Diurnas"] ?? 0) +
-                  (calc.horas?.["Extras Nocturnas"] ?? 0) +
-                  (calc.horas?.["Extras Diurnas Dominical"] ?? 0) +
-                  (calc.horas?.["Extras Nocturnas Dominical"] ?? 0),
+                : (horas?.["Extras Diurnas"] ?? 0) +
+                  (horas?.["Extras Nocturnas"] ?? 0) +
+                  (horas?.["Extras Diurnas Dominical"] ?? 0) +
+                  (horas?.["Extras Nocturnas Dominical"] ?? 0),
             totalHoras:
-              jornada.turnoId === "D" ? 0 : calc.horas?.["Total Horas"] ?? 0,
+              jornada.turnoId === "D" ? 0 : horas?.["Total Horas"] ?? 0,
 
             // Valores recalculados
             valorRecargoNocturnoOrdinario:
               jornada.turnoId === "D"
                 ? 0
-                : calc.valores?.["Valor Recargo Nocturno Ordinario"] ?? 0,
+                : valores?.["Valor Recargo Nocturno Ordinario"] ?? 0,
             valorRecargoFestivoDiurno:
               jornada.turnoId === "D"
                 ? 0
-                : calc.valores?.["Valor Recargo Festivo Diurno"] ?? 0,
+                : valores?.["Valor Recargo Festivo Diurno"] ?? 0,
             valorRecargoFestivoNocturno:
               jornada.turnoId === "D"
                 ? 0
-                : calc.valores?.["Valor Recargo Festivo Nocturno"] ?? 0,
+                : valores?.["Valor Recargo Festivo Nocturno"] ?? 0,
             valorExtrasDiurnas:
               jornada.turnoId === "D"
                 ? 0
-                : calc.valores?.["Valor Extras Diurnas"] ?? 0,
+                : valores?.["Valor Extras Diurnas"] ?? 0,
             valorExtrasNocturnas:
               jornada.turnoId === "D"
                 ? 0
-                : calc.valores?.["Valor Extras Nocturnas"] ?? 0,
+                : valores?.["Valor Extras Nocturnas"] ?? 0,
             valorExtrasDiurnasDominical:
               jornada.turnoId === "D"
                 ? 0
-                : calc.valores?.["Valor Extras Diurnas Dominical"] ?? 0,
+                : valores?.["Valor Extras Diurnas Dominical"] ?? 0,
             valorExtrasNocturnasDominical:
               jornada.turnoId === "D"
                 ? 0
-                : calc.valores?.["Valor Extras Nocturnas Dominical"] ?? 0,
+                : valores?.["Valor Extras Nocturnas Dominical"] ?? 0,
             valorTotalDia:
-              jornada.turnoId === "D"
-                ? 0
-                : calc.valores?.["Valor Total Día"] ?? 0,
+              jornada.turnoId === "D" ? 0 : valores?.["Valor Total Día"] ?? 0,
           };
 
           await actualizarJornada(userId, jornada.id, updateData);

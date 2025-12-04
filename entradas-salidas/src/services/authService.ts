@@ -45,8 +45,15 @@ export const AuthService = {
   },
 };
 
-export function mapFirebaseError(err: any): string {
-  const code = String(err?.code || "");
+export function mapFirebaseError(err: unknown): string {
+  // Convertimos de manera segura sin usar `any`
+  const code =
+    typeof err === "object" &&
+    err !== null &&
+    typeof (err as Record<string, unknown>).code === "string"
+      ? (err as Record<string, unknown>).code as string
+      : "";
+
   if (code.includes("auth/invalid-credential"))
     return "Credenciales inválidas.";
   if (code.includes("auth/invalid-email")) return "Correo inválido.";
@@ -55,5 +62,6 @@ export function mapFirebaseError(err: any): string {
   if (code.includes("auth/popup-closed-by-user")) return "Popup cerrado.";
   if (code.includes("auth/popup-blocked")) return "Popup bloqueado.";
   if (code.includes("auth/too-many-requests")) return "Demasiados intentos.";
+
   return "Ocurrió un error. Intenta de nuevo.";
 }

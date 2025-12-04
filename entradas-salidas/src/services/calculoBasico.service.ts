@@ -19,7 +19,11 @@ export function calcularDiaBasico(
   recargos: RecargosConfig,
   rules: JornadaRules,
   turno: TurnoInput
-): { tarifaHoraAplicada: number; horas: any; valores: any } {
+): {
+  tarifaHoraAplicada: number;
+  horas: Record<string, number>;
+  valores: Record<string, number>;
+} {
   // helpers locales
   const toDate = (d: string, hm: string) => {
     const [y, m, day] = d.split("-").map(Number);
@@ -76,9 +80,16 @@ export function calcularDiaBasico(
 
   // 3) normales vs extras
   const baseMin = Math.min(totalMin, rules.baseDailyHours * 60);
-  const pDiur = diurnaMin / totalMin || 0;
-  const normalesDiurMin = Math.round(baseMin * pDiur);
-  const normalesNoctMin = baseMin - normalesDiurMin;
+
+  // Calcular horas normales asignando primero a las horas diurnas, luego nocturnas
+  // Esto asegura que las horas extras se asignen a la categoría donde ocurren cronológicamente
+  const normalesDiurMin = Math.min(diurnaMin, baseMin);
+  const normalesNoctMin = Math.min(
+    nocturnaMin,
+    Math.max(0, baseMin - normalesDiurMin)
+  );
+
+  // Horas extras son el excedente en cada categoría
   const extrasDiurMin = Math.max(0, diurnaMin - normalesDiurMin);
   const extrasNoctMin = Math.max(0, nocturnaMin - normalesNoctMin);
 

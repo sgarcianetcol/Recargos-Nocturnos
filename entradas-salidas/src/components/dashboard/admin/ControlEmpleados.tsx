@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
@@ -6,15 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 
-import {
-  UserPlus,
-  Search,
-  History,
-  Clock,
-  MapPin,
-  Camera,
-  Download,
-} from "lucide-react";
+import { Search, History, Clock, MapPin, Camera, Download } from "lucide-react";
 
 import {
   Dialog,
@@ -42,7 +35,6 @@ import { getUsuarios } from "@/services/usuariosService";
 import {
   listarTodasLasJornadas,
   JornadaActiva,
-  obtenerJornadaActiva,
   listarJornadasActivas,
 } from "@/services/jornadaActiva.service";
 
@@ -89,7 +81,7 @@ export default function ControlEmpleados() {
   // FILTRO DE EMPLEADOS
   // ------------------------------------------------------
   const filteredEmpleados = useMemo(() => {
-    let filtered = empleados.filter((emp) => {
+    const filtered = empleados.filter((emp) => {
       const term = searchTerm.toLowerCase();
 
       return (
@@ -186,8 +178,12 @@ export default function ControlEmpleados() {
 
     const data = filteredHistory.map((j) => ({
       Fecha: j.fecha,
-      "Hora Inicio": j.horaInicio ? format(j.horaInicio, "HH:mm") : "N/A",
-      "Hora Fin": j.horaFin ? format(j.horaFin, "HH:mm") : "N/A",
+      "Hora Inicio": j.horaInicio
+        ? format(j.horaInicio.toDate(), "HH:mm")
+        : "N/A",
+
+      "Hora Fin": j.horaFin ? format(j.horaFin.toDate(), "HH:mm") : "N/A",
+
       Turno: j.turnoId,
       Estado: j.estado,
       "Ubicación Inicio": j.ubicacionInicio
@@ -468,7 +464,7 @@ export default function ControlEmpleados() {
                                             ? (() => {
                                                 try {
                                                   return format(
-                                                    j.horaInicio,
+                                                    j.horaInicio.toDate(),
                                                     "HH:mm"
                                                   );
                                                 } catch (error) {
@@ -477,13 +473,14 @@ export default function ControlEmpleados() {
                                               })()
                                             : "N/A"}
                                         </p>
+
                                         <p>
                                           <b>Fin:</b>{" "}
                                           {j.horaFin
                                             ? (() => {
                                                 try {
                                                   return format(
-                                                    j.horaFin,
+                                                    j.horaFin.toDate(),
                                                     "HH:mm"
                                                   );
                                                 } catch (error) {
@@ -492,6 +489,7 @@ export default function ControlEmpleados() {
                                               })()
                                             : "N/A"}
                                         </p>
+
                                         <p>
                                           <b>Turno:</b> {j.turnoId}
                                         </p>

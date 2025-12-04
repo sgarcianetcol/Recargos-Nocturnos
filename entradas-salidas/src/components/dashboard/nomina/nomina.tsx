@@ -1,5 +1,6 @@
 "use client";
 import * as React from "react";
+import { Timestamp } from "firebase/firestore";
 import {
   Table,
   TableBody,
@@ -23,7 +24,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogClose,
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Download } from "lucide-react";
@@ -31,16 +31,20 @@ import { Download } from "lucide-react";
 import { db } from "@/lib/firebase";
 import {
   collection,
-  Timestamp,
   collectionGroup,
   getDocs,
   orderBy,
   query,
   where,
-  getDoc,
-  doc,
 } from "firebase/firestore";
 import { Empresa, JornadaDoc, NominaRow } from "@/models/jornada.model";
+import type { Empleado } from "@/models/usuarios.model";
+
+type HistorialEntry = {
+  accion: string;
+  hora?: string;
+  ubicacion?: { lat: number; lng: number };
+};
 import { periodoActual } from "@/utils/periodo";
 
 export default function NominaResumen() {
@@ -52,11 +56,8 @@ export default function NominaResumen() {
   const [rows, setRows] = React.useState<NominaRow[]>([]);
 
   // mapear jornadas por usuario
-  const clean = (n: number) => (n % 1 === 0 ? Math.round(n) : n);
 
-  const [jornadasPorEmpleado, setJornadasPorEmpleado] = React.useState<
-    Record<string, JornadaDoc[]>
-  >({});
+  const [] = React.useState<Record<string, JornadaDoc[]>>({});
 
   const [loading, setLoading] = React.useState(false);
   const [nombres, setNombres] = React.useState<Record<string, string>>({});
@@ -79,7 +80,8 @@ export default function NominaResumen() {
       const snap = await getDocs(collection(db, "usuarios"));
       const map: Record<string, string> = {};
       snap.forEach((d) => {
-        map[d.id] = (d.data() as any).nombre ?? d.id;
+        const data = d.data() as Empleado;
+        map[d.id] = data.nombre ?? d.id;
       });
       setNombres(map);
       console.log(`🔹 ${snap.size} usuarios cargados`);
@@ -112,7 +114,7 @@ export default function NominaResumen() {
     };
 
     cargarJornadas();
-  }, [detalleEmpleado?.id]); // 👈 solo el id, no el objeto entero
+  }, [detalleEmpleado?.id, detalleEmpleado?.nombre, fechaFin, fechaInicio]); // 👈 solo el id, no el objeto entero
 
   // dentro de tu componente
   const cargar = React.useCallback(async () => {
@@ -121,7 +123,7 @@ export default function NominaResumen() {
       console.log("🔹 Iniciando carga de jornadas/resumen...");
       console.log(`📅 Filtrando de: ${fechaInicio} a ${fechaFin}`);
 
-      const base: any[] = [
+      const base: (ReturnType<typeof where> | ReturnType<typeof orderBy>)[] = [
         where("fecha", ">=", fechaInicio),
         where("fecha", "<=", fechaFin),
         orderBy("fecha", "asc"),
@@ -148,9 +150,9 @@ export default function NominaResumen() {
 
       // 🔹 Cargar datos de empleados (para salario y valorHora)
       const empleadosSnap = await getDocs(collection(db, "usuarios"));
-      const empleados: Record<string, any> = {};
+      const empleados: Record<string, Empleado> = {};
       empleadosSnap.forEach((doc) => {
-        empleados[doc.id] = doc.data();
+        empleados[doc.id] = doc.data() as Empleado;
       });
 
       console.log("👥 Empleados cargados:", Object.keys(empleados).length);
@@ -160,23 +162,31 @@ export default function NominaResumen() {
       for (const jornada of list) {
         const empleado = empleados[jornada.userId];
         if (empleado && empleado.recargosActivos === false) {
+          // Calcular los valores de extras antes de ponerlos a 0
+          const tarifa = empleado.salarioBaseMensual / 220; // asumir 220 horas laborales mensuales
+          const valorExtrasDiurnas =
+            (jornada.extrasDiurnas || 0) * tarifa * 1.25;
+          const valorExtrasNocturnas =
+            (jornada.extrasNocturnas || 0) * tarifa * 1.75;
+          const valorExtrasDiurnasDominical =
+            (jornada.extrasDiurnasDominical || 0) * tarifa * 2.05;
+          const valorExtrasNocturnasDominical =
+            (jornada.extrasNocturnasDominical || 0) * tarifa * 2.55;
+
           // Si el empleado tiene extras desactivados, forzar extras a 0
           jornada.extrasDiurnas = 0;
           jornada.extrasNocturnas = 0;
           jornada.extrasDiurnasDominical = 0;
           jornada.extrasNocturnasDominical = 0;
           jornada.horasExtras = 0;
-          jornada.valorExtrasDiurnas = 0;
-          jornada.valorExtrasNocturnas = 0;
-          jornada.valorExtrasDiurnasDominical = 0;
-          jornada.valorExtrasNocturnasDominical = 0;
-          // Recalcular valorTotalDia restando los valores de extras
+
+          // Recalcular valorTotalDia restando los valores de extras calculados
           jornada.valorTotalDia =
             (jornada.valorTotalDia || 0) -
-            (jornada.valorExtrasDiurnas || 0) -
-            (jornada.valorExtrasNocturnas || 0) -
-            (jornada.valorExtrasDiurnasDominical || 0) -
-            (jornada.valorExtrasNocturnasDominical || 0);
+            valorExtrasDiurnas -
+            valorExtrasNocturnas -
+            valorExtrasDiurnasDominical -
+            valorExtrasNocturnasDominical;
         }
       }
 
@@ -308,9 +318,9 @@ export default function NominaResumen() {
 
     // 🔹 Cargar empleados
     const empleadosSnap = await getDocs(collection(db, "usuarios"));
-    const empleados: Record<string, any> = {};
+    const empleados: Record<string, Empleado> = {};
     empleadosSnap.forEach((doc) => {
-      empleados[doc.id] = doc.data();
+      empleados[doc.id] = doc.data() as Empleado;
     });
 
     // 🔹 Definir tipo para las filas de datos (ELIMINAMOS MES REPORTADO)
@@ -318,7 +328,7 @@ export default function NominaResumen() {
       [key: string]: string | number;
       "MES CAUSADO": string;
       NOMBRE: string;
-      CEDULA: any;
+      CEDULA: string;
       SALARIO: number;
       "HORA ORDINARIA (NO MODIFICAR)": number;
       FECHA: string;
@@ -413,7 +423,7 @@ export default function NominaResumen() {
         SALARIO: Math.round(salario),
         "HORA ORDINARIA (NO MODIFICAR)": Math.round(salario / 184),
         FECHA: fechaActual,
-        PROYECTO: empleado?.proyecto ?? "",
+        PROYECTO: empleado?.proyectos?.join(", ") ?? "",
         "CANTIDAD HORA EXTRA DIURNA": hExtraDiurna,
         "CANTIDAD HORA EXTRA NOCTURNA": hExtraNocturna,
         "CANTIDAD HORA EXTRA DIURNA FESTIVA": hExtraDiurnaFestiva,
@@ -534,7 +544,6 @@ export default function NominaResumen() {
     // 🔹 Aplicar estilos con COLORES ESPECÍFICOS
     const range = XLSX.utils.decode_range(ws["!ref"]!);
     const headers = Object.keys(data[0]); // Obtener nombres de columnas
-    const ultimaFila = data.length - 1; // Índice de la última fila (TOTAL)
 
     // 🔹 Encontrar el índice de la columna "MES CAUSADO"
     const columnaMesCausadoIndex = headers.indexOf("MES CAUSADO");
@@ -667,14 +676,16 @@ export default function NominaResumen() {
             hour12: false,
             hour: "2-digit",
             minute: "2-digit",
-          }) || j.historial?.find((h: any) => h.accion === "inicio")?.hora
+          }) ||
+          j.historial?.find((h: HistorialEntry) => h.accion === "inicio")?.hora
         : j.horaEntrada;
       const fin = esAutomatica
         ? j.horaFinReal?.toDate?.().toLocaleTimeString("es-CO", {
             hour12: false,
             hour: "2-digit",
             minute: "2-digit",
-          }) || j.historial?.find((h: any) => h.accion === "fin")?.hora
+          }) ||
+          j.historial?.find((h: HistorialEntry) => h.accion === "fin")?.hora
         : j.horaSalida;
 
       return {
@@ -696,7 +707,10 @@ export default function NominaResumen() {
         "Total Horas": j.totalHoras ?? 0,
         "Valor Total Día": j.valorTotalDia ?? 0,
         Estado: j.estado,
-        "Creado En": j.creadoEn?.toDate?.().toLocaleString() || "N/A",
+        "Creado En":
+          j.creadoEn && typeof j.creadoEn === "object" && "toDate" in j.creadoEn
+            ? j.creadoEn.toDate().toLocaleString()
+            : "N/A",
       };
     });
 
@@ -776,7 +790,10 @@ export default function NominaResumen() {
           onChange={(e) => setBusqueda(e.target.value)}
           className="w-60"
         />
-        <Select value={empresa} onValueChange={(v) => setEmpresa(v as any)}>
+        <Select
+          value={empresa}
+          onValueChange={(v) => setEmpresa(v as Empresa | "TODAS")}
+        >
           <SelectTrigger className="w-48">
             <SelectValue placeholder="Empresa" />
           </SelectTrigger>
@@ -941,7 +958,7 @@ export default function NominaResumen() {
 
               <div className="grid gap-3">
                 {modalJornadas && modalJornadas.length > 0 ? (
-                  modalJornadas.map((j: any, i: number) => {
+                  modalJornadas.map((j: JornadaDoc, i: number) => {
                     const esAutomatica = !!j.historial; // tiene array historial
                     const inicio = esAutomatica
                       ? j.horaInicioReal
@@ -951,8 +968,9 @@ export default function NominaResumen() {
                             hour: "2-digit",
                             minute: "2-digit",
                           }) ||
-                        j.historial?.find((h: any) => h.accion === "inicio")
-                          ?.hora
+                        j.historial?.find(
+                          (h: HistorialEntry) => h.accion === "inicio"
+                        )?.hora
                       : j.horaEntrada;
                     const fin = esAutomatica
                       ? j.horaFinReal?.toDate?.().toLocaleTimeString("es-CO", {
@@ -960,19 +978,23 @@ export default function NominaResumen() {
                           hour: "2-digit",
                           minute: "2-digit",
                         }) ||
-                        j.historial?.find((h: any) => h.accion === "fin")?.hora
+                        j.historial?.find(
+                          (h: HistorialEntry) => h.accion === "fin"
+                        )?.hora
                       : j.horaSalida;
 
                     const ubicacionInicio = esAutomatica
                       ? j.ubicacionInicio ||
-                        j.historial?.find((h: any) => h.accion === "inicio")
-                          ?.ubicacion
+                        j.historial?.find(
+                          (h: HistorialEntry) => h.accion === "inicio"
+                        )?.ubicacion
                       : null;
 
                     const ubicacionFin = esAutomatica
                       ? j.ubicacionFin ||
-                        j.historial?.find((h: any) => h.accion === "fin")
-                          ?.ubicacion
+                        j.historial?.find(
+                          (h: HistorialEntry) => h.accion === "fin"
+                        )?.ubicacion
                       : null;
 
                     return (
@@ -1075,7 +1097,7 @@ export default function NominaResumen() {
 
                           <p className="text-gray-500 text-xs">
                             Creado:{" "}
-                            {j.creadoEn?.toDate
+                            {j.creadoEn instanceof Timestamp
                               ? j.creadoEn.toDate().toLocaleString()
                               : "N/A"}
                           </p>
@@ -1100,9 +1122,6 @@ export default function NominaResumen() {
 }
 
 // ——— Helpers
-function round(n: number, d = 2) {
-  return Number(n || 0).toFixed(d);
-}
 function money(n: number) {
   return new Intl.NumberFormat("es-CO", {
     style: "currency",

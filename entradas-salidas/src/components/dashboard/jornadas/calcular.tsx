@@ -53,8 +53,8 @@ export default function CalcularJornadaPage() {
     turno: TurnoBase;
     esDF: boolean;
     tarifa: number;
-    horas: any;
-    valores: any;
+    horas: Record<string, number>;
+    valores: Record<string, number>;
   }>(null);
 
   const exportarExcel = async () => {

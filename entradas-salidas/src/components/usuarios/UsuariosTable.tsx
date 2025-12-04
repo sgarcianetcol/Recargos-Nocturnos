@@ -50,12 +50,6 @@ import { CheckCircle2Icon, AlertCircleIcon, InfoIcon } from "lucide-react";
 import { getAuth, fetchSignInMethodsForEmail } from "firebase/auth";
 
 export default function UsuariosTable() {
-  const normalizeRol = (rol: string): Empleado["rol"] => {
-    const lower = rol.toLowerCase().trim();
-    if (lower === "admin") return "admin";
-    return "empleado";
-  };
-
   const [empleados, setEmpleados] = React.useState<Empleado[]>([]);
   const [open, setOpen] = React.useState(false);
   const [openEdit, setOpenEdit] = React.useState(false);
@@ -81,13 +75,13 @@ export default function UsuariosTable() {
   } | null>(null);
 
   // Import states
-  const [importando, setImportando] = React.useState(false);
-  const [importResult, setImportResult] = React.useState<{
+  const [, setImportando] = React.useState(false);
+  const [, setImportResult] = React.useState<{
     creados: number;
     duplicados: string[];
     errores: Array<{ row: number; email?: string; reason: string }>;
   } | null>(null);
-  const [exportData, setExportData] = React.useState<any[]>([]);
+  const [exportData, setExportData] = React.useState<unknown[]>([]);
 
   // Cargar empleados al iniciar
   React.useEffect(() => {
@@ -136,14 +130,14 @@ export default function UsuariosTable() {
       }
 
       // ✅ Si pasa la validación, crear empleado
-      const uid = await crearEmpleadoConAcceso({
+      await crearEmpleadoConAcceso({
         nombre: nuevo.nombre!,
         correo: nuevo.correo!,
         documento: nuevo.documento || "",
-        rol: nuevo.rol || "empleado",
-        empresa: nuevo.empresa || "NETCOL",
+        rol: nuevo.rol as Empleado["rol"],
+        empresa: nuevo.empresa as Empleado["empresa"],
         activo: true,
-        salarioBaseMensual: Number(nuevo.salarioBaseMensual),
+        salarioBaseMensual: nuevo.salarioBaseMensual!,
       });
 
       setAlertDialogData({
@@ -151,22 +145,24 @@ export default function UsuariosTable() {
         titulo: "Empleado creado ✅",
         descripcion: `Se creó el usuario y se envió un correo a ${nuevo.correo} para que defina su contraseña.`,
       });
-
       setOpen(false);
       setNuevo({ rol: "empleado", empresa: "NETCOL" });
       setEmpleados(await EmpleadoService.listar());
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
 
       let titulo = "Error al crear empleado";
       let descripcion =
-        error.message ||
+        (error instanceof Error ? error.message : String(error)) ||
         "Ocurrió un error desconocido al intentar crear el empleado.";
 
       // ⚠️ Detectar si el correo ya existe en Firebase
-      if (error.code === "auth/email-already-in-use") {
+      if (
+        error instanceof Error &&
+        error.message.includes("auth/email-already-in-use")
+      ) {
         titulo = "Correo ya registrado";
-        descripcion = `El correo ${nuevo.correo} ya está en uso. 
+        descripcion = `El correo ${nuevo.correo} ya está en uso.
     Usa un correo diferente o revisa si este empleado ya fue creado.`;
       }
 
@@ -206,7 +202,7 @@ export default function UsuariosTable() {
   };
 
   // Helper: limpiar y convertir salario
-  const parseSalario = (raw: any): number => {
+  const parseSalario = (raw: unknown): number => {
     if (raw === null || raw === undefined) return NaN;
     const cleaned = String(raw).replace(/[^0-9.-]+/g, "");
     const v = Number(cleaned);
@@ -214,29 +210,6 @@ export default function UsuariosTable() {
   };
 
   // Descargar CSV de errores
-  const downloadErrorsCsv = (
-    errors: Array<{ row: number; email?: string; reason: string }>,
-    duplicados: string[]
-  ) => {
-    const rows: string[] = [];
-    rows.push(`tipo,detalle`);
-    // duplicados
-    duplicados.forEach((email) => rows.push(`duplicado,${email}`));
-    // errores
-    errors.forEach((e) =>
-      rows.push(`error,Fila ${e.row} | ${e.email ?? "—"} | ${e.reason}`)
-    );
-    const csv = rows.join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.setAttribute("download", "errores_importacion.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
 
   // Importar Excel (implementación completa)
   // Importar Excel (implementación completa con validación de duplicados)
@@ -253,9 +226,12 @@ export default function UsuariosTable() {
       const arrayBuffer = await file.arrayBuffer();
       const workbook = XLSX.read(arrayBuffer, { type: "array" });
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rawData: any[] = XLSX.utils.sheet_to_json(worksheet, {
-        defval: "",
-      });
+      const rawData: Record<string, unknown>[] = XLSX.utils.sheet_to_json(
+        worksheet,
+        {
+          defval: "",
+        }
+      );
 
       if (rawData.length === 0) {
         setAlertDialogData({
@@ -367,12 +343,12 @@ export default function UsuariosTable() {
             result.duplicados.push(`${correo} (ya existe en Auth)`);
             continue;
           }
-        } catch (err: any) {
+        } catch (err: unknown) {
           result.errores.push({
             row: rowNumber,
             email: correo,
             reason: `Error verificando existencia del correo: ${
-              err?.message ?? String(err)
+              err instanceof Error ? err.message : String(err)
             }`,
           });
           continue;
@@ -393,12 +369,12 @@ export default function UsuariosTable() {
             );
             continue;
           }
-        } catch (err: any) {
+        } catch (err: unknown) {
           result.errores.push({
             row: rowNumber,
             email: correo,
             reason: `Error verificando duplicados en Firestore: ${
-              err?.message ?? String(err)
+              err instanceof Error ? err.message : String(err)
             }`,
           });
           continue;
@@ -416,11 +392,13 @@ export default function UsuariosTable() {
             salarioBaseMensual: salario,
           });
           result.creados += 1;
-        } catch (err: any) {
+        } catch (err: unknown) {
           result.errores.push({
             row: rowNumber,
             email: correo,
-            reason: `Error creando usuario: ${err?.message ?? String(err)}`,
+            reason: `Error creando usuario: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
           });
           continue;
         }

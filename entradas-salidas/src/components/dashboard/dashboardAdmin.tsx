@@ -30,12 +30,6 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 
-import {
-  SidebarProvider,
-  SidebarTrigger,
-  SidebarInset,
-} from "@/components/ui/sidebar";
-
 import { RevenueChart } from "@/components/dashboard/revenue-chart";
 import {
   getDashboardStats,
@@ -43,10 +37,21 @@ import {
   type DashboardStats,
 } from "@/services/dashboard.service";
 
+/* -----------------------------------------------------
+   TIPO CORRECTO PARA ACTIVIDAD RECIENTE
+------------------------------------------------------*/
+interface ActividadReciente {
+  id: string;
+  tipo: "jornada_iniciada" | "jornada_finalizada" | string;
+  mensaje: string;
+  timestamp: Date | number | { toDate: () => Date };
+}
+
 export default function DashboardAdmin() {
   const [rol, setRol] = React.useState<Rol | "todos">("todos");
   const [activos, setActivos] = React.useState<Empleado[]>([]);
   const [cargando, setCargando] = React.useState(true);
+
   const [estadisticas, setEstadisticas] = React.useState<DashboardStats>({
     empleadosActivos: 0,
     horasProgramadasHoy: 0,
@@ -56,9 +61,15 @@ export default function DashboardAdmin() {
     capacidadSistema: 0,
     cumplimientoProgramacion: 0,
   });
-  const [actividadReciente, setActividadReciente] = React.useState<any[]>([]);
+
+  const [actividadReciente, setActividadReciente] =
+    React.useState<ActividadReciente[]>([]);
+
   const [cargandoStats, setCargandoStats] = React.useState(true);
 
+  /* -----------------------------------------------------
+     CARGAR ACTIVOS
+  ------------------------------------------------------*/
   const cargarActivos = React.useCallback(async () => {
     setCargando(true);
 
@@ -83,6 +94,9 @@ export default function DashboardAdmin() {
     }
   }, [rol]);
 
+  /* -----------------------------------------------------
+     CARGAR ESTADÍSTICAS + ACTIVIDAD
+  ------------------------------------------------------*/
   const cargarEstadisticas = React.useCallback(async () => {
     setCargandoStats(true);
     try {
@@ -90,8 +104,11 @@ export default function DashboardAdmin() {
         getDashboardStats(),
         getActividadReciente(5),
       ]);
+
       setEstadisticas(stats);
-      setActividadReciente(actividad);
+
+      // Aquí ya llega perfectamente tipado
+      setActividadReciente(actividad as ActividadReciente[]);
     } catch (error) {
       console.error("Error cargando estadísticas:", error);
     } finally {
@@ -105,18 +122,33 @@ export default function DashboardAdmin() {
 
   React.useEffect(() => {
     cargarEstadisticas();
-    // Actualizar cada 5 minutos
     const interval = setInterval(cargarEstadisticas, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, [cargarEstadisticas]);
 
-  const formatTiempo = (timestamp: any) => {
+  /* -----------------------------------------------------
+     FORMAT TIEMPO TIPADO
+  ------------------------------------------------------*/
+  const formatTiempo = (
+    timestamp: Date | number | { toDate: () => Date } | null | undefined
+  ) => {
     if (!timestamp) return "Hace un momento";
 
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    let date: Date;
+
+    if (timestamp instanceof Date) {
+      date = timestamp;
+    } else if (typeof timestamp === "number") {
+      date = new Date(timestamp);
+    } else if ("toDate" in timestamp) {
+      date = timestamp.toDate();
+    } else {
+      return "Fecha inválida";
+    }
+
     const ahora = new Date();
     const diffMs = ahora.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / (1000 * 60));
+    const diffMins = Math.floor(diffMs / 60000);
 
     if (diffMins < 1) return "Hace un momento";
     if (diffMins < 60) return `Hace ${diffMins} minutos`;
@@ -127,6 +159,9 @@ export default function DashboardAdmin() {
     return date.toLocaleDateString("es-ES");
   };
 
+  /* -----------------------------------------------------
+     UI
+  ------------------------------------------------------*/
   return (
     <>
       {/* Header */}
@@ -147,7 +182,7 @@ export default function DashboardAdmin() {
       <main className="flex-1 p-6 space-y-6">
         {/* KPIs */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {/* Empleados activos */}
+          {/* Empleados activos */} 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">
@@ -259,6 +294,7 @@ export default function DashboardAdmin() {
             </CardContent>
           </Card>
         </div>
+
         {/* KPIs adicionales */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card>
@@ -330,6 +366,7 @@ export default function DashboardAdmin() {
             </CardContent>
           </Card>
         </div>
+
         {/* Gráfica */}
         <div className="grid grid-cols-1">
           <Card>
@@ -344,6 +381,7 @@ export default function DashboardAdmin() {
             </CardContent>
           </Card>
         </div>
+
         {/* Actividad reciente */}
         <Card>
           <CardHeader>

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
+import { Timestamp } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   AlertDialog,
@@ -12,23 +13,14 @@ import {
   AlertDialogDescription,
   AlertDialogContent,
 } from "@/components/ui/alert-dialog";
-import {
-  Play,
-  Square,
-  Camera,
-  MapPin,
-  Clock,
-  CheckCircle,
-  XCircle,
-} from "lucide-react";
+import { Camera, MapPin, Clock, CheckCircle, XCircle } from "lucide-react";
 import { getAuth, onAuthStateChanged, User } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import {
-  iniciarJornada,
   finalizarJornada,
+  iniciarJornada,
   obtenerJornadaActiva,
-  capturarFoto,
   obtenerUbicacionActual,
   type JornadaActiva,
 } from "@/services/jornadaActiva.service";
@@ -65,9 +57,7 @@ export default function InicioJornadaView() {
   const [permisoDenegado, setPermisoDenegado] = useState<
     "ubicacion" | "camara" | null
   >(null);
-  const [tipoAccionPermiso, setTipoAccionPermiso] = useState<
-    "inicio" | "fin" | null
-  >(null);
+  const [, setTipoAccionPermiso] = useState<"inicio" | "fin" | null>(null);
   const [accionPendiente, setAccionPendiente] = useState<
     "inicio" | "fin" | null
   >(null);
@@ -146,9 +136,6 @@ export default function InicioJornadaView() {
 
         // Obtener turno del día
         const hoy = new Date();
-        const fechaId = `${hoy.getFullYear()}_${String(
-          hoy.getMonth() + 1
-        ).padStart(2, "0")}_${String(hoy.getDate()).padStart(2, "0")}`;
         const turnoRef = doc(
           db,
           "usuarios",
@@ -289,7 +276,7 @@ export default function InicioJornadaView() {
 
       try {
         // Iniciar jornada
-        const jornadaId = await iniciarJornada(empleado, turnoId, fotoDataURL);
+        await iniciarJornada(empleado, turnoId, fotoDataURL);
 
         // Actualizar estado
         const jornada = await obtenerJornadaActiva(user.uid);
@@ -327,9 +314,11 @@ export default function InicioJornadaView() {
     setTipoAccion(null);
   };
 
-  const formatearHora = (fecha: Date | any) => {
+  const formatearHora = (fecha: Date | Timestamp | null | undefined) => {
     if (!fecha) return "--:--";
-    const d = fecha.toDate ? fecha.toDate() : new Date(fecha);
+
+    const d = fecha instanceof Timestamp ? fecha.toDate() : fecha;
+
     return d.toLocaleTimeString("es-CO", {
       hour: "2-digit",
       minute: "2-digit",

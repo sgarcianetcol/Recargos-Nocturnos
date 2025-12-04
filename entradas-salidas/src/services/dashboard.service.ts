@@ -1,4 +1,4 @@
- import { db } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
 import {
   collection,
   collectionGroup,
@@ -19,6 +19,14 @@ export interface DashboardStats {
   turnosNocturnosHoy: number;
   capacidadSistema: number;
   cumplimientoProgramacion: number;
+}
+
+export interface ActividadReciente {
+  id: string;
+  tipo: string;
+  mensaje: string;
+  timestamp: Date | { toDate: () => Date } | string; // Firebase timestamp or Date
+  userId: string;
 }
 
 /**
@@ -161,7 +169,9 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 /**
  * Obtiene actividad reciente del sistema (empleados que han registrado entradas hoy)
  */
-export async function getActividadReciente(limite: number = 5): Promise<any[]> {
+export async function getActividadReciente(
+  limite: number = 5
+): Promise<unknown[]> {
   try {
     const hoy = new Date().toISOString().slice(0, 10);
 
@@ -173,7 +183,7 @@ export async function getActividadReciente(limite: number = 5): Promise<any[]> {
     );
 
     const snap = await getDocs(jornadasQuery);
-    const actividades: any[] = [];
+    const actividades: ActividadReciente[] = [];
 
     // Obtener nombres de usuarios
     const userIds = new Set<string>();
@@ -223,9 +233,20 @@ export async function getActividadReciente(limite: number = 5): Promise<any[]> {
     // Ordenar por timestamp descendente y limitar
     return actividades
       .sort((a, b) => {
-        const timeA = a.timestamp?.toDate?.() || new Date(a.timestamp);
-        const timeB = b.timestamp?.toDate?.() || new Date(b.timestamp);
-        return timeB.getTime() - timeA.getTime();
+        const getTime = (
+          timestamp: Date | { toDate: () => Date } | string
+        ): number => {
+          if (typeof timestamp === "string") {
+            return new Date(timestamp).getTime();
+          } else if (timestamp instanceof Date) {
+            return timestamp.getTime();
+          } else {
+            return timestamp.toDate().getTime();
+          }
+        };
+        const timeA = getTime(a.timestamp);
+        const timeB = getTime(b.timestamp);
+        return timeB - timeA;
       })
       .slice(0, limite);
   } catch (error) {

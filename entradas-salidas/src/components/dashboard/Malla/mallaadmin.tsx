@@ -3,10 +3,10 @@ import React from "react";
 import * as XLSX from "xlsx";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 import { EmpleadoService } from "@/services/usuariosService";
 import type { Empleado } from "@/models/usuarios.model";
 import { MallaService } from "@/services/malla.service";
+import { TURNOS_PREDETERMINADOS } from "@/models/turnos.defaults";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,12 +19,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Progress } from "@/components/ui/progress";
-import {
-  writeBatch,
-  collectionGroup,
-  getDocs,
-  collection,
-} from "firebase/firestore";
+import { writeBatch, collectionGroup, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -78,7 +73,6 @@ function base64ToWorkbook(base64: string): XLSX.WorkBook {
   return wb;
 }
 
-// ... (Resto de tipos y MONTH_NAMES)
 
 type PreviewCell = {
   day: number;
@@ -104,13 +98,12 @@ export default function MallaEmpleadosPage() {
   const [empleadosMap, setEmpleadosMap] = React.useState<
     Record<string, Empleado>
   >({});
-  const [readMode, setReadMode] = React.useState<"sheet" | "count">("sheet");
-  const [countStartRow, setCountStartRow] = React.useState<number>(9);
+  const [] = React.useState<number>(9);
   const [countNumber, setCountNumber] = React.useState<number | "">(9);
   const [processing, setProcessing] = React.useState(false);
   const [year, setYear] = React.useState<number>(new Date().getFullYear());
   const [fileName, setFileName] = React.useState<string>("");
-  const [uploadTimestamp, setUploadTimestamp] = React.useState<string>("");
+  const [, setUploadTimestamp] = React.useState<string>("");
 
   // Estado para meses seleccionados para guardar
   const [selectedMonths, setSelectedMonths] = React.useState<number[]>([]);
@@ -127,12 +120,21 @@ export default function MallaEmpleadosPage() {
   const [showProgress, setShowProgress] = React.useState(false);
   const [progress, setProgress] = React.useState(0);
 
+  // Estado para las horas totales por empleado
+  const [horasPorEmpleado, setHorasPorEmpleado] = React.useState<
+    { nombre: string; documento?: string; horasTotales: number }[]
+  >([]);
+  const [totalHorasTodos, setTotalHorasTodos] = React.useState(0);
+
   // Función para mostrar mensajes
-  const showMessage = (title: string, description: string) => {
-    setMessageTitle(title);
-    setMessageDescription(description);
-    setMessageDialogOpen(true);
-  };
+  const showMessage = React.useCallback(
+    (title: string, description: string) => {
+      setMessageTitle(title);
+      setMessageDescription(description);
+      setMessageDialogOpen(true);
+    },
+    []
+  );
 
   // --- EFECTO: CARGAR WORKBOOK Y FILENAME DE LOCAL STORAGE ---
   React.useEffect(() => {
@@ -165,13 +167,6 @@ export default function MallaEmpleadosPage() {
     }
   }, []); // Se ejecuta solo al montar el componente
 
-  // --- EFECTO: CONSTRUIR PREVIEW CUANDO WORKBOOK Y EMPLEADOSMAP ESTÉN LISTOS ---
-  React.useEffect(() => {
-    if (workbook && Object.keys(empleadosMap).length > 0) {
-      buildPreviewForMonth(0, workbook, true);
-    }
-  }, [workbook, empleadosMap]);
-
   // Cargar usuarios (map por documento) - Solo activos para mejorar rendimiento
   React.useEffect(() => {
     (async () => {
@@ -184,6 +179,50 @@ export default function MallaEmpleadosPage() {
       setEmpleadosMap(map);
     })();
   }, []);
+
+  // Función para calcular horas totales por empleado
+  const calcularHorasPorEmpleado = React.useCallback(() => {
+    const resumen: {
+      nombre: string;
+      documento?: string;
+      horasTotales: number;
+    }[] = [];
+    let totalGeneral = 0;
+
+    previewRows.forEach((row) => {
+      let horasEmpleado = 0;
+
+      row.cells.forEach((cell) => {
+        if (cell.turno && cell.turno !== "D") {
+          // Buscar el turno en los turnos predeterminados
+          const turnoEncontrado = TURNOS_PREDETERMINADOS.find(
+            (t) => t.id === cell.turno
+          );
+          if (turnoEncontrado) {
+            horasEmpleado += turnoEncontrado.duracionHoras;
+          }
+        }
+      });
+
+      resumen.push({
+        nombre: row.nombre,
+        documento: row.documento,
+        horasTotales: horasEmpleado,
+      });
+
+      totalGeneral += horasEmpleado;
+    });
+
+    setHorasPorEmpleado(resumen);
+    setTotalHorasTodos(totalGeneral);
+  }, [previewRows]);
+
+  // Calcular horas cuando cambian las filas del preview
+  React.useEffect(() => {
+    if (previewRows.length > 0) {
+      calcularHorasPorEmpleado();
+    }
+  }, [previewRows, calcularHorasPorEmpleado]);
 
   // Manejar archivo (ahora guarda en localStorage)
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -222,35 +261,34 @@ export default function MallaEmpleadosPage() {
   };
 
   // Detecta número de días en una hoja de mes
-  // ... (Tu código actual de detectDaysInSheet)
-  const detectDaysInSheet = (
-    sheet: XLSX.WorkSheet,
-    fallbackMonthIndex: number
-  ) => {
-    // intenta contar columnas con datos desde C8 hacia la derecha
-    let count = 0;
-    for (let c = 2; c < 40; c++) {
-      const col = XLSX.utils.encode_col(c);
-      const cell = sheet[`${col}8`];
-      if (cell && String(cell.v).toString().trim() !== "") count++;
-      else if (count > 0 && c > 10) break; // si ya hallamos y después vacio, salimos
-    }
-    if (count >= 28 && count <= 31) return count;
+  const detectDaysInSheet = React.useCallback(
+    (sheet: XLSX.WorkSheet, fallbackMonthIndex: number) => {
+      // intenta contar columnas con datos desde C8 hacia la derecha
+      let count = 0;
+      for (let c = 2; c < 40; c++) {
+        const col = XLSX.utils.encode_col(c);
+        const cell = sheet[`${col}8`];
+        if (cell && String(cell.v).toString().trim() !== "") count++;
+        else if (count > 0 && c > 10) break; // si ya hallamos y después vacio, salimos
+      }
+      if (count >= 28 && count <= 31) return count;
 
-    // fallback: contar datos en fila 9 (primer empleado) desde C9 en adelante
-    let count2 = 0;
-    for (let c = 2; c < 60; c++) {
-      const col = XLSX.utils.encode_col(c);
-      const cell = sheet[`${col}9`];
-      if (cell && String(cell.v).toString().trim() !== "") count2++;
-      else if (count2 > 0 && c > 10) break;
-    }
-    if (count2 >= 28 && count2 <= 31) return count2;
+      // fallback: contar datos en fila 9 (primer empleado) desde C9 en adelante
+      let count2 = 0;
+      for (let c = 2; c < 60; c++) {
+        const col = XLSX.utils.encode_col(c);
+        const cell = sheet[`${col}9`];
+        if (cell && String(cell.v).toString().trim() !== "") count2++;
+        else if (count2 > 0 && c > 10) break;
+      }
+      if (count2 >= 28 && count2 <= 31) return count2;
 
-    // fallback al cálculo por mes y año (último recurso)
-    const d = new Date(year, fallbackMonthIndex + 1, 0).getDate();
-    return d;
-  };
+      // fallback al cálculo por mes y año (último recurso)
+      const d = new Date(year, fallbackMonthIndex + 1, 0).getDate();
+      return d;
+    },
+    [year]
+  );
 
   // ✅ 2. Función setTurno
   const setTurno = (rowIdx: number, day: number, value: string) => {
@@ -288,156 +326,169 @@ export default function MallaEmpleadosPage() {
   };
 
   // Construir preview para 1 mes
-  const buildPreviewForMonth = async (
-    monthIndex: number,
-    wbArg?: XLSX.WorkBook,
-    setState: boolean = true
-  ): Promise<PreviewRow[]> => {
-    const wb = wbArg ?? workbook; // Usa el argumento o el estado
-    if (!wb) {
-      showMessage("Error", "Primero sube el Excel.");
-      return [];
-    }
+  const buildPreviewForMonth = React.useCallback(
+    async (
+      monthIndex: number,
+      wbArg?: XLSX.WorkBook,
+      setState: boolean = true
+    ): Promise<PreviewRow[]> => {
+      const wb = wbArg ?? workbook; // Usa el argumento o el estado
+      if (!wb) {
+        showMessage("Error", "Primero sube el Excel.");
+        return [];
+      }
 
-    // ... (Resto de tu lógica buildPreviewForMonth sin cambios)
-    console.log("[PREVIEW] === INICIANDO PREVIEW ===");
+      // ... (Resto de tu lógica buildPreviewForMonth sin cambios)
+      console.log("[PREVIEW] === INICIANDO PREVIEW ===");
 
-    const sheetNames = wb.SheetNames.map((s) => s.trim());
+      const sheetNames = wb.SheetNames.map((s) => s.trim());
 
-    // --- FORZAMOS HOJA DE EMPLEADOS FIJA ---
-    const empleadosSheet = wb.Sheets["Nombres de los empleados"];
-    if (!empleadosSheet) {
-      showMessage("Error", "No se encontró la hoja 'Nombres de los empleados'");
-      return [];
-    }
-
-    // --- LECTURA FIJA DESDE B4 / C4 SEGÚN CANTIDAD INGRESADA ---
-    const numEmpleados = Number(countNumber) || 0;
-    if (!numEmpleados || numEmpleados < 1) {
-      showMessage("Error", "Ingresa una cantidad válida de empleados");
-      return [];
-    }
-
-    console.log("[PREVIEW] Cantidad de empleados ingresada:", numEmpleados);
-
-    const empleadosList: {
-      nombre: string;
-      documento?: string;
-      row?: number;
-    }[] = [];
-
-    for (let i = 0; i < numEmpleados; i++) {
-      const rowExcel = 4 + i; // B4, C4...
-      const nombre = empleadosSheet[`B${rowExcel}`]?.v ?? null;
-      const documento = empleadosSheet[`C${rowExcel}`]?.v ?? null;
-
-      if (!nombre || !documento) {
-        console.warn(
-          `[PREVIEW] ⚠️ Empleado omitido en fila ${rowExcel} (nombre o documento vacío)`
+      // --- FORZAMOS HOJA DE EMPLEADOS FIJA ---
+      const empleadosSheet = wb.Sheets["Nombres de los empleados"];
+      if (!empleadosSheet) {
+        showMessage(
+          "Error",
+          "No se encontró la hoja 'Nombres de los empleados'"
         );
-        continue;
+        return [];
       }
 
-      empleadosList.push({
-        nombre: String(nombre).trim(),
-        documento: String(documento).trim(),
-        row: 9 + i, // EN TODAS LAS HOJAS MENSUALES EMPIEZA EN B9
-      });
-
-      console.log(
-        `[PREVIEW] Empleado detectado: ${nombre} (${documento}) → fila mes ${
-          9 + i
-        }`
-      );
-    }
-
-    console.log("[PREVIEW] Total empleados cargados:", empleadosList.length);
-
-    // --- HOJA DEL MES ---
-    const monthName = MONTH_NAMES[monthIndex];
-    const sheetName =
-      sheetNames.find(
-        (s) =>
-          typeof s === "string" &&
-          typeof monthName === "string" &&
-          s.toLowerCase().includes(monthName.toLowerCase())
-      ) ?? null;
-
-    sheetNames[monthIndex] ?? null;
-
-    if (!sheetName) {
-      showMessage("Error", "Usuarios Guardados");
-      return [];
-    }
-    const monthSheet = wb.Sheets[sheetName];
-    if (!monthSheet) {
-      showMessage("Error", `Hoja ${sheetName} no encontrada`);
-      return [];
-    }
-
-    console.log("[PREVIEW] Hoja del mes detectada:", sheetName);
-
-    const days = detectDaysInSheet(monthSheet, monthIndex);
-    if (setState) {
-      setDiasMes(days);
-    }
-
-    // --- CONSTRUIR PREVIEW ---
-    const rows: PreviewRow[] = [];
-    for (let idx = 0; idx < empleadosList.length; idx++) {
-      const e = empleadosList[idx];
-      const rowNum = e.row ?? 9;
-
-      const cells: PreviewCell[] = [];
-      for (let d = 1; d <= days; d++) {
-        const colIndex = 2 + d; // C = col 2
-        const colLetter = XLSX.utils.encode_col(colIndex - 1);
-        const addr = `${colLetter}${rowNum}`;
-        const c = monthSheet[addr];
-        const turnoRaw = c?.v ? String(c.v).trim() : "";
-        const turno = turnoRaw === "" ? "D" : turnoRaw;
-
-        cells.push({ day: d, turno: turno, turnoId: turno });
+      // --- LECTURA FIJA DESDE B4 / C4 SEGÚN CANTIDAD INGRESADA ---
+      const numEmpleados = Number(countNumber) || 0;
+      if (!numEmpleados || numEmpleados < 1) {
+        showMessage("Error", "Ingresa una cantidad válida de empleados");
+        return [];
       }
 
-      // map documento -> uid
-      const docNorm = String(e.documento ?? "").replace(/\D/g, ""); // Solo dígitos
-      const match = docNorm ? empleadosMap[docNorm] ?? undefined : undefined;
+      console.log("[PREVIEW] Cantidad de empleados ingresada:", numEmpleados);
 
-      rows.push({
-        idx,
-        nombre: e.nombre,
-        documento: e.documento,
-        uid: match ? match.id : null,
-        cells,
-        estado: match ? "pendiente" : "sin-usuario",
-      });
-    }
+      const empleadosList: {
+        nombre: string;
+        documento?: string;
+        row?: number;
+      }[] = [];
 
-    // Aplicar cambios guardados en localStorage para este mes
-    const existingChanges = JSON.parse(
-      localStorage.getItem(LOCAL_STORAGE_CHANGES_KEY) || "{}"
-    );
-    rows.forEach((row) => {
-      row.cells.forEach((cell) => {
-        const changesKey = `${monthIndex}-${row.idx}-${cell.day}`;
-        if (existingChanges[changesKey] !== undefined) {
-          cell.turno = existingChanges[changesKey] || null;
-          cell.turnoId = existingChanges[changesKey] || "";
-          cell.changed = true;
-          row.estado = "corregido";
+      for (let i = 0; i < numEmpleados; i++) {
+        const rowExcel = 4 + i; // B4, C4...
+        const nombre = empleadosSheet[`B${rowExcel}`]?.v ?? null;
+        const documento = empleadosSheet[`C${rowExcel}`]?.v ?? null;
+
+        if (!nombre || !documento) {
+          console.warn(
+            `[PREVIEW] ⚠️ Empleado omitido en fila ${rowExcel} (nombre o documento vacío)`
+          );
+          continue;
         }
+
+        empleadosList.push({
+          nombre: String(nombre).trim(),
+          documento: String(documento).trim(),
+          row: 9 + i, // EN TODAS LAS HOJAS MENSUALES EMPIEZA EN B9
+        });
+
+        console.log(
+          `[PREVIEW] Empleado detectado: ${nombre} (${documento}) → fila mes ${
+            9 + i
+          }`
+        );
+      }
+
+      console.log("[PREVIEW] Total empleados cargados:", empleadosList.length);
+
+      // --- HOJA DEL MES ---
+      const monthName = MONTH_NAMES[monthIndex];
+      const sheetName =
+        sheetNames.find(
+          (s) =>
+            typeof s === "string" &&
+            typeof monthName === "string" &&
+            s.toLowerCase().includes(monthName.toLowerCase())
+        ) ?? null;
+
+      if (!sheetName) {
+        showMessage("Error", "Usuarios Guardados");
+        return [];
+      }
+      const monthSheet = wb.Sheets[sheetName];
+      if (!monthSheet) {
+        showMessage("Error", `Hoja ${sheetName} no encontrada`);
+        return [];
+      }
+
+      console.log("[PREVIEW] Hoja del mes detectada:", sheetName);
+
+      const days = detectDaysInSheet(monthSheet, monthIndex);
+      if (setState) {
+        setDiasMes(days);
+      }
+
+      // --- CONSTRUIR PREVIEW ---
+      const rows: PreviewRow[] = [];
+      for (let idx = 0; idx < empleadosList.length; idx++) {
+        const e = empleadosList[idx];
+        const rowNum = e.row ?? 9;
+
+        const cells: PreviewCell[] = [];
+        for (let d = 1; d <= days; d++) {
+          const colIndex = 2 + d; // C = col 2
+          const colLetter = XLSX.utils.encode_col(colIndex - 1);
+          const addr = `${colLetter}${rowNum}`;
+          const c = monthSheet[addr];
+          const turnoRaw = c?.v ? String(c.v).trim() : "";
+          const turno = turnoRaw === "" ? "D" : turnoRaw;
+
+          cells.push({ day: d, turno: turno, turnoId: turno });
+        }
+
+        // map documento -> uid
+        const docNorm = String(e.documento ?? "").replace(/\D/g, ""); // Solo dígitos
+        const match = docNorm ? empleadosMap[docNorm] ?? undefined : undefined;
+
+        rows.push({
+          idx,
+          nombre: e.nombre,
+          documento: e.documento,
+          uid: match ? match.id : null,
+          cells,
+          estado: match ? "pendiente" : "sin-usuario",
+        });
+      }
+
+      // Aplicar cambios guardados en localStorage para este mes
+      const existingChanges = JSON.parse(
+        localStorage.getItem(LOCAL_STORAGE_CHANGES_KEY) || "{}"
+      );
+      rows.forEach((row) => {
+        row.cells.forEach((cell) => {
+          const changesKey = `${monthIndex}-${row.idx}-${cell.day}`;
+          if (existingChanges[changesKey] !== undefined) {
+            cell.turno = existingChanges[changesKey] || null;
+            cell.turnoId = existingChanges[changesKey] || "";
+            cell.changed = true;
+            row.estado = "corregido";
+          }
+        });
       });
-    });
 
-    if (setState) {
-      setPreviewRows(rows);
-      setMesSeleccionado(monthIndex);
-    }
+      if (setState) {
+        setPreviewRows(rows);
+        setMesSeleccionado(monthIndex);
+      }
 
-    console.log("[PREVIEW] ✅ PREVIEW COMPLETADO");
-    return rows;
-  };
+      console.log("[PREVIEW] ✅ PREVIEW COMPLETADO");
+      return rows;
+    },
+    [
+      workbook,
+      countNumber,
+      empleadosMap,
+      showMessage,
+      setDiasMes,
+      setPreviewRows,
+      setMesSeleccionado,
+      detectDaysInSheet,
+    ]
+  );
 
   // ... (Resto de funciones: linkDocument, saveMonth, saveAllMonths)
   // vincular documento manualmente
@@ -459,71 +510,6 @@ export default function MallaEmpleadosPage() {
   };
 
   // Guardar UN mes (usa MallaService y calcula jornadas)
-  const saveMonth = async (monthIndex: number) => {
-    if (!previewRows.length) {
-      showMessage("Error", "No hay preview para guardar.");
-      return;
-    }
-
-    setProcessing(true);
-    setShowProgress(true);
-    setProgress(0);
-
-    try {
-      console.log("🟡 Guardando mes:", monthIndex + 1);
-
-      // Simular progreso del 1 al 100
-      const progressInterval = setInterval(() => {
-        setProgress((prev) => {
-          if (prev >= 90) {
-            clearInterval(progressInterval);
-            return 90;
-          }
-          return prev + 10;
-        });
-      }, 200);
-
-      const totalOps = await MallaService.saveMonth({
-        previewRows,
-        year,
-        monthIndex,
-      });
-
-      // Calcular jornadas después de guardar la malla
-      await MallaService.calculateJornadasForMonth({
-        previewRows,
-        year,
-        monthIndex,
-      });
-
-      clearInterval(progressInterval);
-      setProgress(100);
-
-      console.log(
-        `✅ Guardado del mes ${
-          monthIndex + 1
-        } completado (${totalOps} escrituras).`
-      );
-      showMessage(
-        "Success",
-        `Mes ${
-          monthIndex + 1
-        } guardado correctamente. Las jornadas han sido calculadas automáticamente.`
-      );
-    } catch (err: any) {
-      console.error("❌ Error guardando mes:", err);
-      showMessage(
-        "Error",
-        "Error guardando mes: " + (err?.message ?? String(err))
-      );
-    } finally {
-      setProcessing(false);
-      setTimeout(() => {
-        setShowProgress(false);
-        setProgress(0);
-      }, 1000);
-    }
-  };
   // Guardar fila específica (solo días cambiados)
   const saveRow = async (rowIdx: number) => {
     const row = previewRows.find((r) => r.idx === rowIdx);
@@ -591,11 +577,12 @@ export default function MallaEmpleadosPage() {
       }
 
       showMessage("Success", "Fila guardada correctamente.");
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("❌ Error guardando fila:", err);
       showMessage(
         "Error",
-        "Error guardando fila: " + (err?.message ?? String(err))
+        "Error guardando fila: " +
+          (err instanceof Error ? err.message : String(err))
       );
     } finally {
       setProcessing(false);
@@ -665,11 +652,12 @@ export default function MallaEmpleadosPage() {
       console.log(
         `🏁 Guardado de meses seleccionados finalizado con ${totalOps} operaciones.`
       );
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("❌ Error guardando meses seleccionados:", err);
       showMessage(
         "Error",
-        "Error guardando meses seleccionados: " + (err?.message ?? String(err))
+        "Error guardando meses seleccionados: " +
+          (err instanceof Error ? err.message : String(err))
       );
     } finally {
       setProcessing(false);
@@ -710,11 +698,12 @@ export default function MallaEmpleadosPage() {
         `Proceso completado. Total escrituras: ${totalOps}. Las jornadas han sido calculadas automáticamente.`
       );
       console.log(`🏁 Guardado global finalizado con ${totalOps} operaciones.`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("❌ Error guardando todos los meses:", err);
       showMessage(
         "Error",
-        "Error guardando todos los meses: " + (err?.message ?? String(err))
+        "Error guardando todos los meses: " +
+          (err instanceof Error ? err.message : String(err))
       );
     } finally {
       setProcessing(false);
@@ -728,8 +717,10 @@ export default function MallaEmpleadosPage() {
       console.log("🟡 Eliminando TODAS las jornadas y malla...");
 
       // Función auxiliar para eliminar en batches
-      const deleteInBatches = async (query: any) => {
-        const snapshot = await getDocs(query);
+      const deleteInBatches = async (query: unknown) => {
+        const snapshot = await getDocs(
+          query as ReturnType<typeof collectionGroup>
+        );
         const batchSize = 400; // Límite seguro por batch
         let totalDeleted = 0;
 
@@ -776,11 +767,12 @@ export default function MallaEmpleadosPage() {
         `Todo ha sido eliminado correctamente. Jornadas: ${jornadasDeleted}, Días: ${diasDeleted}.`
       );
       console.log("🏁 Eliminación completa finalizada.");
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("❌ Error eliminando todo:", err);
       showMessage(
         "Error",
-        "Error eliminando todo: " + (err?.message ?? String(err))
+        "Error eliminando todo: " +
+          (err instanceof Error ? err.message : String(err))
       );
     } finally {
       setProcessing(false);
@@ -1115,13 +1107,61 @@ export default function MallaEmpleadosPage() {
                   colSpan={4 + diasMes}
                   className="p-6 text-center text-sm text-muted-foreground"
                 >
-                  Sube un Excel y pulsa "Generar preview".
+                  Sube un archivo excel
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
+
+      {/* Resumen de Horas por Empleado */}
+      {horasPorEmpleado.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              Resumen de Horas - {MONTH_NAMES[mesSeleccionado]} {year}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="grid gap-2">
+                {horasPorEmpleado.map((emp, index) => (
+                  <div
+                    key={index}
+                    className="flex justify-between items-center p-3 bg-gray-50 rounded-lg"
+                  >
+                    <div>
+                      <span className="font-medium">{emp.nombre}</span>
+                      {emp.documento && (
+                        <span className="text-sm text-gray-600 ml-2">
+                          ({emp.documento})
+                        </span>
+                      )}
+                    </div>
+                    <Badge variant="secondary" className="text-lg px-3 py-1">
+                      {emp.horasTotales} horas
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+              <Separator />
+              <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
+                <span className="font-bold text-lg">
+                  Total de todos los empleados
+                </span>
+                <Badge
+                  variant="default"
+                  className="text-xl px-4 py-2 bg-blue-600"
+                >
+                  {totalHorasTodos} horas
+                </Badge>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

@@ -4,6 +4,11 @@ import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { crearJornadaCalculada } from "@/services/jornada.service";
 import type { Empleado } from "@/models/usuarios.model";
 
+interface MallaDiaData {
+  turno?: string;
+  [key: string]: unknown;
+}
+
 /**
  * Helper para fecha ISO
  */
@@ -56,7 +61,7 @@ export async function obtenerEmpleado(
   const snap = await getDoc(ref);
   if (!snap.exists()) return null;
 
-  const data = snap.data() as any;
+  const data = snap.data() as unknown;
   // Evitamos advertencia por duplicar id: aplicamos spread de datos y luego id
   return { ...(data as Empleado), id: snap.id } as Empleado;
 }
@@ -95,8 +100,8 @@ export async function iniciarJornadaConUbicacion(
     console.log("[empleados.service] sin malla para el dia:", fecha);
     return { ok: false, sinTurno: true };
   }
-  const mallaData = mallaSnap.data() as any;
-  const turnoId = mallaData?.turno;
+  const mallaData = mallaSnap.data() as MallaDiaData;
+const turnoId = mallaData.turno;
   if (!turnoId) {
     console.log("[empleados.service] malla no tiene turnoId:", mallaData);
     return { ok: false, sinTurno: true };
