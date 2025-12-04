@@ -6,5 +6,64 @@ runConfig:
   concurrency: 80
 
 env:
+  - variable: FIREBASE_PROJECT_ID
+    value: controlpersonal-a5371
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: FIREBASE_CLIENT_EMAIL
+    value: firebase-adminsdk-fbsvc@controlpersonal-a5371.iam.gserviceaccount.com
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: FIREBASE_PRIVATE_KEY
+    value: |
+      -----BEGIN PRIVATE KEY-----
+      MIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQDySQ59n6vra4Qf
+      48RcSU1f239mAmnZ7xjzW1jORa223E+awKfu/FMw6vuG7DKqiIWiSLug0sy0/F1f
+      MelzqxAh7xO/ch8easKqqNtEnwQbARJtCxA7UJPyuEAF11+bpmQNTh94Pls7qISq
+      tn1F5gwoc9hK2cBoxmx6h2nPBghDuACDleBuzZ/4a//Jyl0k4Os7jKuZYXqcXUqE
+      tkbBtB3PD5xE01Vy1+bqMR2Xg2FL4ZCuj82b4t8jjKm89ZJEV5C3a+twghunqVhQ
+      2Dt1zKhXd1vbtrj+k1TqI9B7UFh4FEU2nV5x2Ca0Ovt3ju8lCyF9SW/f7pBUblit
+      4fMh0vRPAgMBAAECggEACy0BhRvrYzWXZ50q/pLHBefrDXqJBWt4/Ci3hPRD2g55
+      gYrndCehcr00EvosMB+SAnVWakmu9Z46dFyqBxLZ8KbFg2wxMUb9ab/WNWkcWF6J
+      SgxbmFDUMjr7gQl5OIXJUa/L1dEShkL0s6ctSh8danRFgtZegLa+ZDyAzfLaSL1K
+      FuEjVmHjzoefm/UWynW/8f0brEb6XjjIMgWJit/9GXDcEoDb4QTejnG9rFFCNz56
+      5ycfrFjJ+kE+p0cLJwqMLp+AAz/Ry6tU3H3I7uQ+j/X1tCSzOAjfPFq/UvGESV5l
+      fdeCUP9WECwrathXjKIajTyhu0PsN+NG9xCWfNLpqQKBgQD6WpJDxYUzMqJbw/uR
+      lqxuVfLHr0j9riKydjMfMKsMRVORlHeF65uGWu0ueAIBevwSv70h3WAG9dZ2OVx0
+      X8+4s+PGkl1VSc1ZZnqb50TrtxwqobKYNeuLi2+f2EOBvrvTyfZ08KLj/4cQrdDh
+      1CGONIzxMHPFC4rYnzJqfyKsWwKBgQD3v+bivFFM+wR8AKrpEFGVu0ErhkhdU5VB
+      W1fq+4XlII90WAn5NANAWmW2jJWRkVMPiTMkCllSX72+8cw6w0Zy4vSSC/jR7U2u
+      ewk98YLJZXThRq8+chm/nLGtO7/Bu2edBDyJF2HiStP2Y3biTHQaU49yE4VWsNa5
+      ssGxrCOqHQKBgQC8YZ6hxGUgSz+EUYpg2MHTHHVc8Ha5/Gg7ZVm+ZH6w8xGY/+CY
+      MtuKU60ZRFAuEP7QlNqaOtvhIOdJeowpPVcuop4Ic2YroScV2Fj2KyXfQJ+/LIEY
+      q6ocDMXnv3G8lWr8SIJdKB1J9qMJV+FPrLG7MavEaTMT2EWYDuJ+5D+Q9QKBgQCb
+      4H/SVI4KkzzlED54WS4buS9txRUusvILpv8P96Ts3qmjl+jehF0vVjD8xEMuzXKn
+      KbmliWVdsKNfyh6nMknW6vjaEvJAkr/3ca4E7TlOoakCPEjyTzPoHRylVBx4NgMh
+      BZNY5f9OM6pdMYORKm06SyzLp4CTZLwVJmU79oSR+QKBgQDl0R3YuU7SZaM8e0CM
+      w+R2uxpqDu1eBOUbh+AsbvmO/QWDQwe5cigcCkKBZ3yeWz6pUiWR3M1IqU+logsF
+      3+cG5Ciqi91pdW5+AMeAzYsMiyRgo72g2qDNJHAmMVJUcnejVZOhoUrKK+zcJmAj
+      adkd4ANi6t2pt46Kw8ih1Hw+og==
+      -----END PRIVATE KEY-----
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: EMAIL_USER
+    value: portesjerson12@gmail.com
+    availability:
+      - RUNTIME
+
+  - variable: EMAIL_PASS
+    value: ukxv tuus joyr ztoj
+    availability:
+      - RUNTIME
+
   - variable: NEXT_PUBLIC_BACKEND_URL
     value: https://my-web-app-535711646177.us-central1.run.app
+    availability:
+      - BUILD
+      - RUNTIME
