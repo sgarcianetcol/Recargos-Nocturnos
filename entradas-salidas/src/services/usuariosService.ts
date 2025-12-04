@@ -55,8 +55,10 @@ function mapDocToEmpleado(d: DocumentData, id: string): Empleado {
 const colRef = collection(db, "usuarios");
 
 /* ===========================
-   NUEVO: Crear empleado con acceso (usando API)
+   Crear empleado con acceso (usando API)
 =========================== */
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
+
 export async function crearEmpleadoConAcceso(
   data: Omit<Empleado, "id" | "creadoEn">
 ) {
@@ -67,8 +69,11 @@ export async function crearEmpleadoConAcceso(
     throw new Error("El salario debe ser mayor a 0.");
   }
 
-  // Llamar al API route en lugar de crear directamente
-  const response = await fetch("/api/crear-empleado", {
+  if (!BACKEND_URL) {
+    throw new Error("No se ha configurado la URL del backend.");
+  }
+
+  const response = await fetch(`${BACKEND_URL}/api/crear-empleado`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -77,13 +82,14 @@ export async function crearEmpleadoConAcceso(
   });
 
   if (!response.ok) {
-    const errorData = await response.json();
+    const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.error || "Error creando empleado");
   }
 
   const result = await response.json();
   return result.uid;
 }
+
 
 /* ===========================
    Obtener datos del usuario logueado (para login)
