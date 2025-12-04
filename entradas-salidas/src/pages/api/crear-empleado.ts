@@ -159,22 +159,33 @@ export default async function handler(
       subject: "Bienvenido a NETCOL - Define tu contraseña",
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #333;">¡Bienvenido a NETCOL, ${nombre}!</h2>
-          <p>Tu cuenta ha sido creada exitosamente. Para continuar, define tu contraseña aquí:</p>
+  <h2 style="color: #333;">¡Bienvenido a NETCOL, ${nombre}!</h2>
+  <p>Tu cuenta ha sido creada exitosamente. Para continuar, define tu contraseña aquí:</p>
 
-          <p style="text-align:center; margin:30px 0;">
-            <a href="${resetLink}" 
-              style="background:#007bff; color:white; padding:12px 24px; text-decoration:none; border-radius:5px;">
-              Definir Contraseña
-            </a>
-          </p>
+  <p style="text-align:center; margin:30px 0;">
+    <a href="${resetLink}" 
+      style="background:#007bff; color:white; padding:12px 24px; text-decoration:none; border-radius:5px;">
+      Definir Contraseña
+    </a>
+  </p>
 
-          <p>Si el botón no funciona, copia este enlace:</p>
-          <p style="word-break:break-all; color:#666;">${resetLink}</p>
+  <!-- 🔥 TEXTO GRANDE QUE PEDISTE -->
+  <h1 style="text-align:center; color:#000; font-size:26px; margin:40px 0; line-height:1.4;">
+    🔗 Cuando termines de crear tu contraseña, vuelve al correo e ingresa aquí:<br><br>
+    <a href="https://my-web-app--controlpersonal-a5371.us-central1.hosted.app/" 
+       style="color:#007bff; text-decoration:none;">
+      https://my-web-app--controlpersonal-a5371.us-central1.hosted.app/
+    </a>
+  </h1>
+  <!-- 🔥 FIN TEXTO GRANDE -->
 
-          <hr style="border:none; border-top:1px solid #eee; margin:20px 0;">
-          <p style="color:#666; font-size:12px;">Si no solicitaste esta cuenta, ignora este mensaje.</p>
-        </div>
+  <p>Si el botón no funciona, copia este enlace:</p>
+  <p style="word-break:break-all; color:#666;">${resetLink}</p>
+
+  <hr style="border:none; border-top:1px solid #eee; margin:20px 0;">
+  <p style="color:#666; font-size:12px;">Si no solicitaste esta cuenta, ignora este mensaje.</p>
+</div>
+
       `,
     };
 
