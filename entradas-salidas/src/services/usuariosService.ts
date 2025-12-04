@@ -62,17 +62,29 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 export async function crearEmpleadoConAcceso(
   data: Omit<Empleado, "id" | "creadoEn">
 ) {
-  if (!data.correo || !data.nombre) {
-    throw new Error("Faltan campos obligatorios: nombre / correo.");
-  }
-  if (!data.salarioBaseMensual || Number(data.salarioBaseMensual) <= 0) {
-    throw new Error("El salario debe ser mayor a 0.");
-  }
+  console.log("🔍 BACKEND_URL:", BACKEND_URL);
+  console.log(
+    "🔍 process.env.NEXT_PUBLIC_BACKEND_URL:",
+    process.env.NEXT_PUBLIC_BACKEND_URL
+  );
+  console.log("🔍 Endpoint completo:", `${BACKEND_URL}/api/crear-empleado`);
+  console.log("🔍 BACKEND_URL:", BACKEND_URL); // ← Para debug
 
+  // Validación de BACKEND_URL primero
   if (!BACKEND_URL) {
     throw new Error("No se ha configurado la URL del backend.");
   }
 
+  // Validaciones de datos
+  if (!data.correo || !data.nombre) {
+    throw new Error("Faltan campos obligatorios: nombre / correo.");
+  }
+
+  if (!data.salarioBaseMensual || Number(data.salarioBaseMensual) <= 0) {
+    throw new Error("El salario debe ser mayor a 0.");
+  }
+
+  // Llamada al backend
   const response = await fetch(`${BACKEND_URL}/api/crear-empleado`, {
     method: "POST",
     headers: {
@@ -89,8 +101,6 @@ export async function crearEmpleadoConAcceso(
   const result = await response.json();
   return result.uid;
 }
-
-
 /* ===========================
    Obtener datos del usuario logueado (para login)
 =========================== */
