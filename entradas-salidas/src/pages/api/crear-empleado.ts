@@ -172,9 +172,9 @@ export default async function handler(
   <!-- 🔥 TEXTO GRANDE QUE PEDISTE -->
   <h1 style="text-align:center; color:#000; font-size:26px; margin:40px 0; line-height:1.4;">
     🔗 Cuando termines de crear tu contraseña, vuelve al correo e ingresa aquí:<br><br>
-    <a href="https://my-web-app--controlpersonal-a5371.us-central1.hosted.app/" 
+    <a href="https://my-web-app--controlpersonal-a5371.us-central1.hosted.app/signin" 
        style="color:#007bff; text-decoration:none;">
-      https://my-web-app--controlpersonal-a5371.us-central1.hosted.app/
+      https://my-web-app--controlpersonal-a5371.us-central1.hosted.app/signin
     </a>
   </h1>
   <!-- 🔥 FIN TEXTO GRANDE -->

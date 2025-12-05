@@ -949,7 +949,7 @@ export default function MallaEmpleadosPage() {
           <div className="grid grid-cols-4 gap-2 max-w-lg">
             {MONTH_NAMES.map((month, index) => (
               <Button
-                key={index}
+                key={month} // 🔥 clave estable
                 type="button"
                 variant={selectedMonths.includes(index) ? "default" : "outline"}
                 size="sm"
