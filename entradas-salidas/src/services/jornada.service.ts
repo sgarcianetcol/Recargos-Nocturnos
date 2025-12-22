@@ -53,8 +53,14 @@ export async function crearJornadaCalculada(opts: {
   const recargosCfg: RecargosConfig = recargosCfgRaw ?? DEFAULT_RECARGOS;
   const rules: JornadaRules = rulesRaw ?? DEFAULT_RULES;
 
-  // 2) Dominical / festivo
-  const esDF = await esDominicalOFestivo(fecha);
+ // 2) Dominical / festivo del día de inicio
+const esDF = await esDominicalOFestivo(fecha);
+
+// --- NUEVA LÓGICA PARA EL DÍA SIGUIENTE ---
+const fechaObj = new Date(fecha + "T00:00:00");
+fechaObj.setDate(fechaObj.getDate() + 1);
+const fechaSiguiente = fechaObj.toISOString().split('T')[0];
+const siguienteDiaFestivo = await esDominicalOFestivo(fechaSiguiente);
 
   // 3) Cálculo de jornada
   const horaEntradaCalc = jornadaReal?.horaEntrada
@@ -91,18 +97,20 @@ export async function crearJornadaCalculada(opts: {
   const horasTrabajadas = (salidaMin - entradaMin) / 60;
 
   const calc = calcularDiaBasico(
-    empleado.salarioBaseMensual ?? 0,
-    nominaCfg,
-    recargosCfg,
-    rules,
-    {
-      fecha,
-      horaEntrada: horaEntradaCalc,
-      horaSalida: horaSalidaCalc,
-      esDominicalFestivo: esDF,
-      recargosActivos: empleado.recargosActivos ?? true,
-    }
-  );
+  empleado.salarioBaseMensual ?? 0,
+  nominaCfg,
+  recargosCfg,
+  rules,
+  {
+    fecha,
+    horaEntrada: horaEntradaCalc,
+    horaSalida: horaSalidaCalc,
+    esDominicalFestivo: esDF,
+    recargosActivos: empleado.recargosActivos ?? true,
+    cruzaMedianoche: cruzo,
+    siguienteDiaFestivo: siguienteDiaFestivo, // Ahora sí tiene valor
+  }
+);
 
   // 4) Documento final para Firestore
   const docData: Omit<JornadaDoc, "id"> = {
@@ -314,4 +322,42 @@ export async function listarJornadasPorEmpresaRango(opts: {
 // Eliminar jornada
 export async function eliminarJornada(userId: string, jornadaId: string) {
   await deleteDoc(doc(db, "usuarios", userId, "jornadas", jornadaId));
+}
+
+// Agregar horas extra manuales
+export async function agregarHorasExtraManuales(
+  userId: string,
+  jornadaId: string,
+  nuevaHoraSalida: string,
+  notaJefeExtra: string
+) {
+  const ref = doc(db, "usuarios", userId, "jornadas", jornadaId);
+  await updateDoc(ref, {
+    horaSalida: nuevaHoraSalida,
+    notaJefeExtra,
+    // Recalcular horas extras basado en la nueva hora de salida
+    // Esto requeriría lógica adicional para recalcular las horas
+    // Por ahora, solo actualizamos la hora de salida y la nota
+  });
+}
+
+// Calcular extras semanales
+export async function calcularExtrasSemanales(
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _empleado: Empleado,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _year: number,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _monthIndex: number,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _cells: { day: number; turno: string | null; turnoId: string }[]
+) {
+  const extrasMap: Record<string, number> = {};
+
+  // TODO: Implementar lógica para calcular horas extras semanales
+  // Esta función debería analizar el horario semanal del empleado y determinar
+  // qué días tienen horas extras basándose en las reglas de la empresa
+  // Por ahora, retorna un mapa vacío
+
+  return extrasMap;
 }

@@ -4,6 +4,7 @@ import { JornadaRules, NominaConfig, RecargosConfig } from "./config.model";
 
 export const DEFAULT_NOMINA: NominaConfig = {
   horasLaboralesMes: 220,
+  horasLaboralesSemana: 44,
 };
 
 export const DEFAULT_RECARGOS: RecargosConfig = {

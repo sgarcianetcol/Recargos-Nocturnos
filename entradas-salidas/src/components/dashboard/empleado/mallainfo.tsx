@@ -280,6 +280,11 @@ export default function MallaInfo() {
                         Hora Entrada: {j.horaEntrada} | Hora Salida:{" "}
                         {j.horaSalida}
                       </p>
+                      {j.notaJefeExtra && (
+                        <p className="text-sm text-blue-600 dark:text-blue-300 mt-2">
+                          Nota del jefe: {j.notaJefeExtra}
+                        </p>
+                      )}
                     </div>
 
                     <div className="text-right">

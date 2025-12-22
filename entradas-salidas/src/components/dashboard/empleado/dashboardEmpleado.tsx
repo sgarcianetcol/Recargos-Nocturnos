@@ -29,15 +29,15 @@ interface PreviewData {
   valores: Record<string, number>;
 }
 
-export default function DashboardEmpleado({
-}: {
-  usuarioId: string;
-}) {
+export default function DashboardEmpleado({}: { usuarioId: string }) {
   // 🔹 Usuario autenticado
   const [user, setUser] = useState<User | null>(null);
 
   // 🔹 Turno actual
-  const [turno, setTurno] = useState<{ turno: string; [key: string]: unknown } | null>(null);
+  const [turno, setTurno] = useState<{
+    turno: string;
+    [key: string]: unknown;
+  } | null>(null);
   const [detalleTurno, setDetalleTurno] = useState<TurnoBase | null>(null);
 
   // 🔹 Estados de carga
@@ -46,7 +46,9 @@ export default function DashboardEmpleado({
   // 🔹 Datos base
   const [empleados, setEmpleados] = useState<Empleado[]>([]);
   const [turnos, setTurnos] = useState<TurnoBase[]>([]);
-  const [nominaCfg, setNominaCfg] = useState<{ horasLaboralesMes: number } | null>(null);
+  const [nominaCfg, setNominaCfg] = useState<{
+    horasLaboralesMes: number;
+  } | null>(null);
   const [recargos, setRecargos] = useState<RecargosConfig | null>(null);
   const [rules, setRules] = useState<JornadaRules | null>(null);
 
@@ -130,7 +132,7 @@ export default function DashboardEmpleado({
           const fechaStr = fecha.toISOString().split("T")[0];
           const esDF = await esDominicalOFestivo(fechaStr);
 
-          const calc = calcularDiaBasico(
+          const calc = await calcularDiaBasico(
             emp.salarioBaseMensual,
             nominaCfg,
             recargos,
@@ -159,7 +161,18 @@ export default function DashboardEmpleado({
     };
 
     fetchTurno();
-  }, [user, empleados, turnos, nominaCfg, recargos, rules, año, mes, dia, fecha]); // fecha NO es necesaria
+  }, [
+    user,
+    empleados,
+    turnos,
+    nominaCfg,
+    recargos,
+    rules,
+    año,
+    mes,
+    dia,
+    fecha,
+  ]); // fecha NO es necesaria
 
   // --- Render ---
   if (loading) return <p className="text-center">Cargando turno...</p>;

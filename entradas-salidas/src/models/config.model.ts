@@ -1,6 +1,7 @@
 // src/models/nomina/config.model.ts
 export interface NominaConfig {
   horasLaboralesMes: number; // p.ej. 240 o 192 (elige una)
+  horasLaboralesSemana?: number;
 }
 
 export interface RecargosConfig {

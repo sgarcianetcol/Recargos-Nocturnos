@@ -11,6 +11,8 @@ export interface TurnoInput {
   horaSalida: string; // "HH:mm" (si <= entrada ⇒ día siguiente)
   esDominicalFestivo: boolean;
   recargosActivos?: boolean; // New parameter to control if recargos are active
+  cruzaMedianoche?: boolean; // Indica si el turno cruza medianoche
+  siguienteDiaFestivo?: boolean; // Indica si el día siguiente es festivo/dominical
 }
 
 export function calcularDiaBasico(
@@ -65,55 +67,156 @@ export function calcularDiaBasico(
   const noct1 = overlap(start, end, night1Start, midnight);
   const noct2 = overlap(start, end, night2Start, night2End);
 
-  let diurnaMin: number, nocturnaMin: number, totalMin: number;
-  totalMin = minDiff(start, end);
-  nocturnaMin = Math.min(noct1 + noct2, totalMin);
-  diurnaMin = totalMin - nocturnaMin;
+  let totalMin = minDiff(start, end);
+  const nocturnaMin = Math.min(noct1 + noct2, totalMin);
+  const diurnaMin = totalMin - nocturnaMin;
+
+  // Determinar si cada día es festivo
+  const esFestivoDia1 = turno.esDominicalFestivo;
+  const esFestivoDia2 = turno.siguienteDiaFestivo || false;
+
+  // Si cruza medianoche y el día siguiente es festivo, dividir las horas
+  let diurnaDia1Min = diurnaMin;
+  let nocturnaDia1Min = noct1;
+  let diurnaDia2Min = 0;
+  let nocturnaDia2Min = noct2;
+
+  if (turno.cruzaMedianoche && esFestivoDia2 !== esFestivoDia1) {
+    // Calcular minutos en cada día
+    const minutosDia1 = minDiff(start, midnight);
+    const minutosDia2 = minDiff(midnight, end);
+
+    // Asignar minutos diurnos y nocturnos a cada día
+    if (minutosDia1 > 0) {
+      const diurnaDia1 = overlap(start, midnight, start, night1Start);
+      const nocturnaDia1 = overlap(start, midnight, night1Start, midnight);
+      diurnaDia1Min = diurnaDia1;
+      nocturnaDia1Min = nocturnaDia1;
+    }
+
+    if (minutosDia2 > 0) {
+      const diurnaDia2 = overlap(midnight, end, midnight, night2End);
+      const nocturnaDia2 = overlap(midnight, end, night2Start, end);
+      diurnaDia2Min = diurnaDia2;
+      nocturnaDia2Min = nocturnaDia2;
+    }
+  }
 
   // redondeo opcional
   if (rules.roundToMinutes && rules.roundToMinutes > 1) {
     const r = rules.roundToMinutes;
-    diurnaMin = Math.round(diurnaMin / r) * r;
-    nocturnaMin = Math.round(nocturnaMin / r) * r;
-    totalMin = diurnaMin + nocturnaMin;
+    diurnaDia1Min = Math.round(diurnaDia1Min / r) * r;
+    nocturnaDia1Min = Math.round(nocturnaDia1Min / r) * r;
+    diurnaDia2Min = Math.round(diurnaDia2Min / r) * r;
+    nocturnaDia2Min = Math.round(nocturnaDia2Min / r) * r;
+    totalMin =
+      diurnaDia1Min + nocturnaDia1Min + diurnaDia2Min + nocturnaDia2Min;
   }
 
-  // 3) normales vs extras
-  const baseMin = Math.min(totalMin, rules.baseDailyHours * 60);
+  // 3) normales vs extras - calcular por día
+  const baseMin = rules.baseDailyHours * 60;
 
-  // Calcular horas normales asignando primero a las horas diurnas, luego nocturnas
-  // Esto asegura que las horas extras se asignen a la categoría donde ocurren cronológicamente
-  const normalesDiurMin = Math.min(diurnaMin, baseMin);
-  const normalesNoctMin = Math.min(
-    nocturnaMin,
-    Math.max(0, baseMin - normalesDiurMin)
+  // Día 1
+  const totalDia1Min = diurnaDia1Min + nocturnaDia1Min;
+  const baseDia1Min = Math.min(totalDia1Min, baseMin);
+  const normalesDiurDia1Min = Math.min(diurnaDia1Min, baseDia1Min);
+  const normalesNoctDia1Min = Math.min(
+    nocturnaDia1Min,
+    Math.max(0, baseDia1Min - normalesDiurDia1Min)
   );
+  const extrasDiurDia1Min = Math.max(0, diurnaDia1Min - normalesDiurDia1Min);
+  const extrasNoctDia1Min = Math.max(0, nocturnaDia1Min - normalesNoctDia1Min);
 
-  // Horas extras son el excedente en cada categoría
-  const extrasDiurMin = Math.max(0, diurnaMin - normalesDiurMin);
-  const extrasNoctMin = Math.max(0, nocturnaMin - normalesNoctMin);
+  // Día 2
+  const totalDia2Min = diurnaDia2Min + nocturnaDia2Min;
+  const baseDia2Min = Math.min(totalDia2Min, baseMin);
+  const normalesDiurDia2Min = Math.min(diurnaDia2Min, baseDia2Min);
+  const normalesNoctDia2Min = Math.min(
+    nocturnaDia2Min,
+    Math.max(0, baseDia2Min - normalesDiurDia2Min)
+  );
+  const extrasDiurDia2Min = Math.max(0, diurnaDia2Min - normalesDiurDia2Min);
+  const extrasNoctDia2Min = Math.max(0, nocturnaDia2Min - normalesNoctDia2Min);
+
+  // Combinar horas por tipo
+  const normalesDiurMin = normalesDiurDia1Min + normalesDiurDia2Min;
+  const normalesNoctMin = normalesNoctDia1Min + normalesNoctDia2Min;
+  const extrasDiurMin = extrasDiurDia1Min + extrasDiurDia2Min;
+  const extrasNoctMin = extrasNoctDia1Min + extrasNoctDia2Min;
 
   const h = (m: number) => +(m / 60).toFixed(2);
 
   // --- HORAS ---
+  // Calcular horas por día y categoría
+  const normalesDiurOrdinario = esFestivoDia1 ? 0 : normalesDiurDia1Min;
+  const normalesNoctOrdinario = esFestivoDia1 ? 0 : normalesNoctDia1Min;
+  const normalesDiurFestivo = esFestivoDia1 ? normalesDiurDia1Min : 0;
+  const normalesNoctFestivo = esFestivoDia1 ? normalesNoctDia1Min : 0;
+
+  const normalesDiurOrdinarioDia2 = esFestivoDia2 ? 0 : normalesDiurDia2Min;
+  const normalesNoctOrdinarioDia2 = esFestivoDia2 ? 0 : normalesNoctDia2Min;
+  const normalesDiurFestivoDia2 = esFestivoDia2 ? normalesDiurDia2Min : 0;
+  const normalesNoctFestivoDia2 = esFestivoDia2 ? normalesNoctDia2Min : 0;
+
+  // Combinar horas de ambos días
+  const totalNormalesDiurOrdinario =
+    normalesDiurOrdinario + normalesDiurOrdinarioDia2;
+  const totalNormalesNoctOrdinario =
+    normalesNoctOrdinario + normalesNoctOrdinarioDia2;
+  const totalNormalesDiurFestivo =
+    normalesDiurFestivo + normalesDiurFestivoDia2;
+  const totalNormalesNoctFestivo =
+    normalesNoctFestivo + normalesNoctFestivoDia2;
+
+  // Extras por día
+  const extrasDiurOrdinario = esFestivoDia1 ? 0 : extrasDiurDia1Min;
+  const extrasNoctOrdinario = esFestivoDia1 ? 0 : extrasNoctDia1Min;
+  const extrasDiurFestivo = esFestivoDia1 ? extrasDiurDia1Min : 0;
+  const extrasNoctFestivo = esFestivoDia1 ? extrasNoctDia1Min : 0;
+
+  const extrasDiurOrdinarioDia2 = esFestivoDia2 ? 0 : extrasDiurDia2Min;
+  const extrasNoctOrdinarioDia2 = esFestivoDia2 ? 0 : extrasNoctDia2Min;
+  const extrasDiurFestivoDia2 = esFestivoDia2 ? extrasDiurDia2Min : 0;
+  const extrasNoctFestivoDia2 = esFestivoDia2 ? extrasNoctDia2Min : 0;
+
+  // Combinar extras
+  const totalExtrasDiurOrdinario =
+    extrasDiurOrdinario + extrasDiurOrdinarioDia2;
+  const totalExtrasNoctOrdinario =
+    extrasNoctOrdinario + extrasNoctOrdinarioDia2;
+  const totalExtrasDiurFestivo = extrasDiurFestivo + extrasDiurFestivoDia2;
+  const totalExtrasNoctFestivo = extrasNoctFestivo + extrasNoctFestivoDia2;
+
   const horas = {
     "Total Horas": h(totalMin),
-    "Hora laboral ordinaria": h(baseMin),
-    "Recargo Nocturno Ordinario": turno.esDominicalFestivo
-      ? 0
-      : h(normalesNoctMin),
-    "Recargo Festivo Diurno": turno.esDominicalFestivo ? h(normalesDiurMin) : 0,
-    "Recargo Festivo Nocturno": turno.esDominicalFestivo
-      ? h(normalesNoctMin)
+    "Normales Diurnas Ordinarias": h(totalNormalesDiurOrdinario),
+
+    // NORMALES
+    "Normales Diurnas": h(normalesDiurMin),
+    "Normales Nocturnas": h(normalesNoctMin),
+
+    // FESTIVOS
+    "Recargo Nocturno Ordinario": h(totalNormalesNoctOrdinario),
+    "Recargo Festivo Diurno": h(totalNormalesDiurFestivo),
+    "Recargo Festivo Nocturno": h(totalNormalesNoctFestivo),
+
+    // EXTRAS
+    "Extras Diurnas": turno.recargosActivos ? h(extrasDiurMin) : 0,
+    "Extras Nocturnas": turno.recargosActivos ? h(extrasNoctMin) : 0,
+    "Extras Diurnas Ordinarias": turno.recargosActivos
+      ? h(totalExtrasDiurOrdinario)
       : 0,
-    "Extras Diurnas":
-      turno.esDominicalFestivo || !turno.recargosActivos ? 0 : h(extrasDiurMin),
-    "Extras Nocturnas":
-      turno.esDominicalFestivo || !turno.recargosActivos ? 0 : h(extrasNoctMin),
-    "Extras Diurnas Dominical":
-      turno.esDominicalFestivo && turno.recargosActivos ? h(extrasDiurMin) : 0,
-    "Extras Nocturnas Dominical":
-      turno.esDominicalFestivo && turno.recargosActivos ? h(extrasNoctMin) : 0,
+
+    "Extras Nocturnas Ordinarias": turno.recargosActivos
+      ? h(totalExtrasNoctOrdinario)
+      : 0,
+
+    "Extras Diurnas Dominical": turno.recargosActivos
+      ? h(totalExtrasDiurFestivo)
+      : 0,
+    "Extras Nocturnas Dominical": turno.recargosActivos
+      ? h(totalExtrasNoctFestivo)
+      : 0,
   };
 
   // --- VALORES ---

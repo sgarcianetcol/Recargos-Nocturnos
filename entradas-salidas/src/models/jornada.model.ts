@@ -69,6 +69,8 @@ export interface JornadaDoc {
   valorExtrasNocturnasDominical: number;
   valorTotalDia: number;
 
+  notaJefeExtra?: string; // Nota del jefe para horas extra manuales
+
   creadoEn: Timestamp | FieldValue | null;
   estado: "calculado" | "cerrado" | "pendiente";
 }

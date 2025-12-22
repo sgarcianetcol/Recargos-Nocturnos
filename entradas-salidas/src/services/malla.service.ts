@@ -14,8 +14,9 @@ import { EmpleadoService } from "@/services/usuariosService";
 import {
   crearJornadaCalculada,
   eliminarJornada,
-} from "@/services/jornada.service";
-
+  calcularExtrasSemanales,
+  } from "@/services/jornada.service";
+import { TurnosService } from "@/services/turnos.service";
 export interface PreviewCell {
   day: number;
   turno: string | null;
@@ -410,74 +411,99 @@ export class MallaService {
    * Calcula jornadas para un mes específico
    */
   static async calculateJornadasForMonth(params: {
-    previewRows: PreviewRow[];
-    year: number;
-    monthIndex: number;
-  }) {
-    const { previewRows, year, monthIndex } = params;
+  previewRows: PreviewRow[];
+  year: number;
+  monthIndex: number;
+}) {
+  const { previewRows, year, monthIndex } = params;
 
-    console.log(`🧮 Calculando jornadas para mes ${monthIndex + 1}...`);
+  console.log(`🧮 Calculando jornadas para mes ${monthIndex + 1}...`);
 
-    let totalJornadas = 0;
+  let totalJornadas = 0;
 
-    for (const row of previewRows) {
-      if (!row.uid) continue;
+  for (const row of previewRows) {
+    if (!row.uid) continue;
 
-      // Obtener datos del empleado
-      const empleado = await EmpleadoService.obtener(row.uid);
-      if (!empleado) {
-        console.warn(`⚠️ Empleado ${row.uid} no encontrado`);
-        continue;
-      }
-
-      for (const cell of row.cells) {
-        if (!cell.turno) continue; // Calcular incluso para días de descanso "D"
-
-        // Construir fecha
-        const fecha = `${year}-${String(monthIndex + 1).padStart(
-          2,
-          "0"
-        )}-${String(cell.day).padStart(2, "0")}`;
-
-        // Eliminar jornada existente si hay
-        const jornadaQuery = query(
-          collection(db, "usuarios", row.uid, "jornadas"),
-          where("fecha", "==", fecha)
-        );
-        const jornadaSnap = await getDocs(jornadaQuery);
-
-        if (!jornadaSnap.empty) {
-          for (const docSnap of jornadaSnap.docs) {
-            await eliminarJornada(row.uid, docSnap.id);
-          }
-          console.log(
-            `🗑️ ${jornadaSnap.docs.length} jornadas eliminadas para ${row.nombre} en ${fecha}`
-          );
-        }
-
-        try {
-          // Crear jornada calculada con el turno actual (incluso para días de descanso "D")
-          await crearJornadaCalculada({
-            empleado,
-            fecha,
-            turnoId: cell.turno === "D" ? "D" : cell.turno, // Usar "D" directamente si es descanso
-          });
-          totalJornadas++;
-          console.log(`✅ Jornada creada para ${row.nombre} en ${fecha}`);
-        } catch (error) {
-          console.error(
-            `❌ Error creando jornada para ${row.nombre} en ${fecha}:`,
-            error
-          );
-        }
-      }
+    // Obtener datos del empleado
+    const empleado = await EmpleadoService.obtener(row.uid);
+    if (!empleado) {
+      console.warn(`⚠️ Empleado ${row.uid} no encontrado`);
+      continue;
     }
 
-    console.log(
-      `🎉 Cálculo de jornadas completado: ${totalJornadas} jornadas creadas`
+    // ✅ CALCULAR EXTRAS SEMANALES PRIMERO
+    const extrasMap = await calcularExtrasSemanales(
+      empleado,
+      year,
+      monthIndex,
+      row.cells
     );
-    return totalJornadas;
+
+    for (const cell of row.cells) {
+      if (!cell.turno) continue;
+
+      // Construir fecha
+      const fecha = `${year}-${String(monthIndex + 1).padStart(
+        2,
+        "0"
+      )}-${String(cell.day).padStart(2, "0")}`;
+
+      // Eliminar jornada existente si hay
+      const jornadaQuery = query(
+        collection(db, "usuarios", row.uid, "jornadas"),
+        where("fecha", "==", fecha)
+      );
+      const jornadaSnap = await getDocs(jornadaQuery);
+
+      if (!jornadaSnap.empty) {
+        for (const docSnap of jornadaSnap.docs) {
+          await eliminarJornada(row.uid, docSnap.id);
+        }
+      }
+
+      try {
+        // ✅ OBTENER TURNO Y CALCULAR HORA DE SALIDA CON EXTRAS
+        const turno = await TurnosService.obtener(cell.turno);
+        let horaSalida = turno?.horaSalida || "17:00";
+
+        // Si hay extras para este día, ajustar hora de salida
+        const horasExtras = extrasMap[fecha] || 0;
+        if (horasExtras > 0) {
+          const [hora, min] = horaSalida.split(":").map(Number);
+          const totalMin = hora * 60 + min + horasExtras * 60;
+          const nuevaHora = Math.floor(totalMin / 60) % 24;
+          const nuevoMin = totalMin % 60;
+          horaSalida = `${String(nuevaHora).padStart(2, "0")}:${String(
+            nuevoMin
+          ).padStart(2, "0")}`;
+        }
+
+        // ✅ CREAR JORNADA CON HORA DE SALIDA AJUSTADA
+        await crearJornadaCalculada({
+          empleado,
+          fecha,
+          turnoId: cell.turno === "D" ? "D" : cell.turno,
+          jornadaReal: horasExtras > 0 ? {
+            horaSalida: new Date(`${fecha}T${horaSalida}`)
+          } : undefined
+        });
+
+        totalJornadas++;
+        console.log(`✅ Jornada creada para ${row.nombre} en ${fecha}${horasExtras > 0 ? ` (con ${horasExtras}h extras)` : ""}`);
+      } catch (error) {
+        console.error(
+          `❌ Error creando jornada para ${row.nombre} en ${fecha}:`,
+          error
+        );
+      }
+    }
   }
+
+  console.log(
+    `🎉 Cálculo de jornadas completado: ${totalJornadas} jornadas creadas`
+  );
+  return totalJornadas;
+}
 
   /**
    * Guarda los 12 meses del año completo

@@ -71,7 +71,7 @@ export default function NominaResumen() {
   //HORAS NORMALES SIN DECIMALES
   function formatHoras(horas: number | undefined) {
     if (horas == null) return "0";
-    return Number.isInteger(horas) ? horas.toString() : horas.toFixed(2);
+    return Math.round(horas).toString();
   }
 
   // Precarga nombres
@@ -696,7 +696,7 @@ export default function NominaResumen() {
         Turno: j.turnoId || "N/A",
         "Hora Entrada": inicio || "N/A",
         "Hora Salida": fin || "N/A",
-        "Horas Normales": j.horasNormales ?? 0,
+        "Horas Totales": j.horasNormales ?? 0,
         "Recargo Nocturno Ordinario": j.recargoNocturnoOrdinario ?? 0,
         "Recargo Festivo Diurno": j.recargoFestivoDiurno ?? 0,
         "Recargo Festivo Nocturno": j.recargoFestivoNocturno ?? 0,
@@ -859,37 +859,37 @@ export default function NominaResumen() {
               <TableRow key={r.userId}>
                 <TableCell className="font-medium">{r.nombre}</TableCell>
                 <TableCell className="text-right">
-                  {money(r.salarioBaseMensual ?? 0)}
+                  {money(Math.round(r.salarioBaseMensual ?? 0))}
                 </TableCell>
                 <TableCell className="text-right">
-                  {money(r.valorHora ?? 0)}
+                  {money(Math.round(r.valorHora ?? 0))}
                 </TableCell>
                 <TableCell className="text-right">
                   {formatHoras(r.totalHoras)}
                 </TableCell>
                 <TableCell className="text-right">
-                  {formatHoras(r.recargoNocturnoOrdinario)}
+                  {formatHoras(Math.round(r.recargoNocturnoOrdinario || 0))}
                 </TableCell>
                 <TableCell className="text-right">
-                  {formatHoras(r.recargoFestivoDiurno)}
+                  {formatHoras(Math.round(r.recargoFestivoDiurno || 0))}
                 </TableCell>
                 <TableCell className="text-right">
-                  {formatHoras(r.recargoFestivoNocturno)}
+                  {formatHoras(Math.round(r.recargoFestivoNocturno || 0))}
                 </TableCell>
                 <TableCell className="text-right">
-                  {formatHoras(r.extrasDiurnas)}
+                  {formatHoras(Math.round(r.extrasDiurnas || 0))}
                 </TableCell>
                 <TableCell className="text-right">
-                  {formatHoras(r.extrasNocturnas)}
+                  {formatHoras(Math.round(r.extrasNocturnas || 0))}
                 </TableCell>
                 <TableCell className="text-right">
-                  {formatHoras(r.extrasDiurnasDominical)}
+                  {formatHoras(Math.round(r.extrasDiurnasDominical || 0))}
                 </TableCell>
                 <TableCell className="text-right">
-                  {formatHoras(r.extrasNocturnasDominical)}
+                  {formatHoras(Math.round(r.extrasNocturnasDominical || 0))}
                 </TableCell>
                 <TableCell className="text-right font-semibold text-blue-700">
-                  {money(r.total$ ?? 0)}
+                  {money(Math.round(r.total$ ?? 0))}
                 </TableCell>
                 <TableCell>
                   <Button
@@ -1060,37 +1060,42 @@ export default function NominaResumen() {
                               💰 Cálculo de Nómina
                             </h4>
                             <div className="grid grid-cols-2 gap-2 text-xs">
-                              <div>Horas Normales: {j.horasNormales ?? 0}</div>
                               <div>
                                 Recargo Nocturno:{" "}
-                                {j.recargoNocturnoOrdinario ?? 0}
+                                {Math.round(j.recargoNocturnoOrdinario ?? 0)}
                               </div>
                               <div>
                                 Recargo Festivo Diurno:{" "}
-                                {j.recargoFestivoDiurno ?? 0}
+                                {Math.round(j.recargoFestivoDiurno ?? 0)}
                               </div>
                               <div>
                                 Recargo Festivo Nocturno:{" "}
-                                {j.recargoFestivoNocturno ?? 0}
+                                {Math.round(j.recargoFestivoNocturno ?? 0)}
                               </div>
-                              <div>Extras Diurnas: {j.extrasDiurnas ?? 0}</div>
                               <div>
-                                Extras Nocturnas: {j.extrasNocturnas ?? 0}
+                                Extras Diurnas:{" "}
+                                {Math.round(j.extrasDiurnas ?? 0)}
+                              </div>
+                              <div>
+                                Extras Nocturnas:{" "}
+                                {Math.round(j.extrasNocturnas ?? 0)}
                               </div>
                               <div>
                                 Extras Diurnas Dominical:{" "}
-                                {j.extrasDiurnasDominical ?? 0}
+                                {Math.round(j.extrasDiurnasDominical ?? 0)}
                               </div>
                               <div>
                                 Extras Nocturnas Dominical:{" "}
-                                {j.extrasNocturnasDominical ?? 0}
+                                {Math.round(j.extrasNocturnasDominical ?? 0)}
                               </div>
                               <div className="col-span-2 font-semibold">
-                                Total Horas: {j.totalHoras ?? 0}
+                                Total Horas: {Math.round(j.totalHoras ?? 0)}
                               </div>
                               <div className="col-span-2 font-semibold text-green-600">
                                 Valor Total Día: $
-                                {j.valorTotalDia?.toLocaleString() || 0}
+                                {Math.round(
+                                  j.valorTotalDia || 0
+                                ).toLocaleString("es-CO")}
                               </div>
                             </div>
                           </div>
@@ -1127,7 +1132,8 @@ function money(n: number) {
     style: "currency",
     currency: "COP",
     maximumFractionDigits: 0,
-  }).format(n || 0);
+    minimumFractionDigits: 0,
+  }).format(Math.round(n || 0));
 }
 function formatear(iso: string) {
   const [y, m, d] = iso.split("-").map(Number);

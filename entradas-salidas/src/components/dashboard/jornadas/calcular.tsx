@@ -11,7 +11,12 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Empleado } from "@/models/usuarios.model";
-import { TurnoBase, RecargosConfig, JornadaRules } from "@/models/config.model";
+import {
+  TurnoBase,
+  RecargosConfig,
+  JornadaRules,
+  NominaConfig,
+} from "@/models/config.model";
 import { EmpleadoService } from "@/services/usuariosService";
 import { TurnosService } from "@/services/turnos.service";
 import { ConfigNominaService } from "@/services/config.service";
@@ -38,9 +43,7 @@ import { CalendarDays } from "lucide-react";
 export default function CalcularJornadaPage() {
   const [empleados, setEmpleados] = React.useState<Empleado[]>([]);
   const [turnos, setTurnos] = React.useState<TurnoBase[]>([]);
-  const [nominaCfg, setNominaCfg] = React.useState<{
-    horasLaboralesMes: number;
-  } | null>(null);
+  const [nominaCfg, setNominaCfg] = React.useState<NominaConfig | null>(null);
   const [recargos, setRecargos] = React.useState<RecargosConfig | null>(null);
   const [rules, setRules] = React.useState<JornadaRules | null>(null);
 
@@ -252,6 +255,7 @@ export default function CalcularJornadaPage() {
         const esDF = await esDominicalOFestivo(fechaStr);
         console.log("📅 Domingo/Festivo:", esDF);
 
+
         // 🟣 Ahora sí calcular
         const calc = calcularDiaBasico(
           emp.salarioBaseMensual,
@@ -461,7 +465,7 @@ export default function CalcularJornadaPage() {
                   <tr key={k}>
                     <td>{k}</td>
                     <td className="text-right">
-                      ${Number(v).toLocaleString("es-CO")}
+                      ${Math.round(Number(v)).toLocaleString("es-CO")}
                     </td>
                   </tr>
                 ))}

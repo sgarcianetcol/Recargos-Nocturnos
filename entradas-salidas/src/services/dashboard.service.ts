@@ -234,16 +234,25 @@ export async function getActividadReciente(
     return actividades
       .sort((a, b) => {
         const getTime = (
-          timestamp: Date | { toDate: () => Date } | string
+          timestamp?: Date | { toDate: () => Date } | string | null
         ): number => {
+          if (!timestamp) return 0;
+
           if (typeof timestamp === "string") {
             return new Date(timestamp).getTime();
-          } else if (timestamp instanceof Date) {
+          }
+
+          if (timestamp instanceof Date) {
             return timestamp.getTime();
-          } else {
+          }
+
+          if (typeof timestamp.toDate === "function") {
             return timestamp.toDate().getTime();
           }
+
+          return 0;
         };
+
         const timeA = getTime(a.timestamp);
         const timeB = getTime(b.timestamp);
         return timeB - timeA;
