@@ -1,4 +1,4 @@
-export type Rol = "admin"  | "empleado";
+export type Rol = "admin" | "empleado";
 export type Empresas = "NETCOL" | "TRIANGULUM" | "INTEEGRA";
 
 export interface Empleado {
@@ -13,5 +13,6 @@ export interface Empleado {
   empresa: Empresas;
   proyectos?: string[];
   recargosActivos?: boolean;
+  calculoSemanalActivo?: boolean; // New field for weekly overtime calculation
   creadoEn: Date; // ojo: en Firestore es Timestamp -> convertir a Date en el cliente
 }

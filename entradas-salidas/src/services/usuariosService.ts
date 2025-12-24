@@ -43,6 +43,7 @@ function mapDocToEmpleado(d: DocumentData, id: string): Empleado {
       ? (d.proyectos as string[])
       : undefined,
     recargosActivos: d.recargosActivos ?? true,
+    calculoSemanalActivo: d.calculoSemanalActivo ?? false,
     creadoEn: d.creadoEn?.toDate
       ? d.creadoEn.toDate()
       : d.creadoEn ?? new Date(),
@@ -118,6 +119,11 @@ export async function getUsuarios(): Promise<Empleado[]> {
 export async function toggleRecargos(userId: string, activo: boolean) {
   const ref = doc(db, "usuarios", userId);
   await updateDoc(ref, { recargosActivos: activo });
+}
+
+export async function toggleCalculoSemanal(userId: string, activo: boolean) {
+  const ref = doc(db, "usuarios", userId);
+  await updateDoc(ref, { calculoSemanalActivo: activo });
 }
 
 /* ===========================

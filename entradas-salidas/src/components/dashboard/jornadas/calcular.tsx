@@ -21,7 +21,10 @@ import { EmpleadoService } from "@/services/usuariosService";
 import { TurnosService } from "@/services/turnos.service";
 import { ConfigNominaService } from "@/services/config.service";
 import { calcularDiaBasico } from "@/services/calculoBasico.service";
-import { crearJornadaCalculada } from "@/services/jornada.service";
+import {
+  crearJornadaCalculada,
+  listarJornadasPorUsuarioRango,
+} from "@/services/jornada.service";
 import { FaUser, FaClock } from "react-icons/fa";
 import { Calendar } from "@/components/ui/calendar";
 import { esDominicalOFestivo } from "@/services/festivos.service";
@@ -255,33 +258,76 @@ export default function CalcularJornadaPage() {
         const esDF = await esDominicalOFestivo(fechaStr);
         console.log("📅 Domingo/Festivo:", esDF);
 
-
-        // 🟣 Ahora sí calcular
-        const calc = calcularDiaBasico(
-          emp.salarioBaseMensual,
-          nominaCfg,
-          recargos,
-          rules,
-          {
-            fecha: fechaStr,
-            horaEntrada: trn.horaEntrada,
-            horaSalida: trn.horaSalida,
-            esDominicalFestivo: esDF,
-            recargosActivos: emp.recargosActivos ?? true,
-          }
-        );
-
-        console.log("🧮 Resultado del cálculo:", calc);
-
-        // Actualizamos el preview
-        setPreview({
-          empleado: emp,
-          turno: trn,
-          esDF,
-          tarifa: calc.tarifaHoraAplicada,
-          horas: calc.horas,
-          valores: calc.valores,
+        // Check for existing jornada
+        const jornadas = await listarJornadasPorUsuarioRango({
+          userId,
+          desdeISO: fechaStr,
+          hastaISO: fechaStr,
         });
+        const existingJornada = jornadas.find((j) => j.fecha === fechaStr);
+
+        if (existingJornada) {
+          console.log("📄 Jornada existente encontrada, usando datos de jornada");
+          // Use existing jornada data
+          setPreview({
+            empleado: emp,
+            turno: trn,
+            esDF,
+            tarifa: existingJornada.tarifaHoraAplicado || 0,
+            horas: {
+              "Total Horas": existingJornada.totalHoras || 0,
+              "Normales Diurnas Ordinarias": existingJornada.horasNormales || 0,
+              "Normales Nocturnas": existingJornada.recargoNocturnoOrdinario || 0,
+              "Recargo Nocturno Ordinario": existingJornada.recargoNocturnoOrdinario || 0,
+              "Recargo Festivo Diurno": existingJornada.recargoFestivoDiurno || 0,
+              "Recargo Festivo Nocturno": existingJornada.recargoFestivoNocturno || 0,
+              "Extras Diurnas": existingJornada.extrasDiurnas || 0,
+              "Extras Nocturnas": existingJornada.extrasNocturnas || 0,
+              "Extras Diurnas Ordinarias": existingJornada.extrasDiurnas || 0,
+              "Extras Nocturnas Ordinarias": existingJornada.extrasNocturnas || 0,
+              "Extras Diurnas Dominical": existingJornada.extrasDiurnasDominical || 0,
+              "Extras Nocturnas Dominical": existingJornada.extrasNocturnasDominical || 0,
+            },
+            valores: {
+              "Valor Recargo Nocturno Ordinario": existingJornada.valorRecargoNocturnoOrdinario || 0,
+              "Valor Recargo Festivo Diurno": existingJornada.valorRecargoFestivoDiurno || 0,
+              "Valor Recargo Festivo Nocturno": existingJornada.valorRecargoFestivoNocturno || 0,
+              "Valor Extras Diurnas": existingJornada.valorExtrasDiurnas || 0,
+              "Valor Extras Nocturnas": existingJornada.valorExtrasNocturnas || 0,
+              "Valor Extras Diurnas Dominical": existingJornada.valorExtrasDiurnasDominical || 0,
+              "Valor Extras Nocturnas Dominical": existingJornada.valorExtrasNocturnasDominical || 0,
+              "Valor Total Día": existingJornada.valorTotalDia || 0,
+            },
+          });
+        } else {
+          console.log("🧮 No hay jornada existente, calculando desde turno");
+          // 🟣 Ahora sí calcular
+          const calc = calcularDiaBasico(
+            emp.salarioBaseMensual,
+            nominaCfg,
+            recargos,
+            rules,
+            {
+              fecha: fechaStr,
+              horaEntrada: trn.horaEntrada,
+              horaSalida: trn.horaSalida,
+              esDominicalFestivo: esDF,
+              recargosActivos: emp.recargosActivos ?? true,
+            }
+          );
+
+          console.log("🧮 Resultado del cálculo:", calc);
+
+          // Actualizamos el preview
+          setPreview({
+            empleado: emp,
+            turno: trn,
+            esDF,
+            tarifa: calc.tarifaHoraAplicada,
+            horas: calc.horas,
+            valores: calc.valores,
+          });
+        }
 
         console.log("✅ Preview actualizado correctamente");
       } catch (error) {

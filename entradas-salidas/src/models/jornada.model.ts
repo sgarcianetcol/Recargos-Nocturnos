@@ -6,6 +6,7 @@ export type Empresa = Empleado["empresa"];
 /** Documento guardado en Firestore (usuarios/{uid}/jornadas/{jid}) */
 // dentro de src/services/nomina/jornada.service.ts (reemplaza/añade campos faltantes)
 export interface JornadaDoc {
+  tarifaHoraAplicado: number;
   id?: string;
   userId: string;
   empresa: Empleado["empresa"];

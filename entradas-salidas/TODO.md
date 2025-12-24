@@ -1,43 +1,42 @@
-# TODO: Agregar Sistema de Filtrado en Resumen de Horas
+m # TODO: Weekly Overtime Calculation Implementation
 
-## Estado Actual
+## Current Status
 
-- El componente `mallaadmin.tsx` muestra un resumen de horas por empleado para el mes seleccionado.
-- La sección "Resumen de Horas" lista todos los empleados con sus horas totales y un total general.
+- [x] Analyzed existing code and understood requirements
+- [x] Confirmed plan with user
 
-## Plan de Implementación
+## Pending Tasks
 
-1. **Agregar Estados para Filtros**
+### 1. Model Updates
 
-   - Estado para término de búsqueda (nombre/documento)
-   - Estado para rango de horas mínimo
-   - Estado para rango de horas máximo
-   - Estado para mostrar solo empleados con horas asignadas
+- [ ] Add `calculoSemanalActivo?: boolean;` to Empleado interface in usuarios.model.ts
+- [ ] Modify TurnoInput interface to include `horasAcumuladasSemana: number;`
 
-2. **Crear UI de Filtros**
+### 2. Calculation Service Updates
 
-   - Agregar una sección de filtros arriba del resumen
-   - Campos de entrada para búsqueda, min/max horas
-   - Checkbox para "Mostrar solo con horas"
+- [ ] Update `calcularDiaBasico` function to accept new parameter and implement chronological logic
+- [ ] Implement minute-by-minute processing when weekly calculation is active
+- [ ] Process shift chronologically, checking accumulated hours against 44-hour threshold (2640 minutes)
 
-3. **Implementar Lógica de Filtrado**
+### 3. Admin Configuration Updates
 
-   - Crear función para filtrar la lista de horasPorEmpleado
-   - Aplicar filtros: búsqueda, rango de horas, solo con horas
-   - Calcular total basado en lista filtrada
+- [ ] Add toggle in configuracionAdmin.tsx for weekly calculation per employee
+- [ ] Update user creation/editing forms to include the new field
 
-4. **Actualizar Display**
-   - Mostrar lista filtrada en lugar de la completa
-   - Actualizar total general con el filtrado
-   - Agregar indicador de cantidad de empleados mostrados
+### 4. Service Integration
 
-## Archivos a Modificar
+- [ ] Update jornada.service.ts calls to `calcularDiaBasico` to pass accumulated weekly hours
+- [ ] Implement logic to calculate accumulated weekly hours before calling calculation service
 
-- `entradas-salidas/src/components/dashboard/Malla/mallaadmin.tsx`
+### 5. Testing and Verification
 
-## Próximos Pasos
+- [ ] Test with example scenarios (like Domingo 23 case)
+- [ ] Verify chronological fragmentation works correctly
+- [ ] Ensure backward compatibility with existing calculations
 
-- Implementar estados de filtros
-- Crear UI de filtros
-- Implementar lógica de filtrado
-- Actualizar cálculos y display
+## Notes
+
+- Threshold: 44 hours = 2640 minutes
+- When weekly calculation is active, process shift minute by minute
+- Fragment single shift into multiple concepts (Recargos/Extras) chronologically
+- Current `recargosActivos` field already controls extras calculation correctly

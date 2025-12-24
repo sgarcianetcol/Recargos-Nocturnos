@@ -42,6 +42,7 @@ import {
 import {
   getUsuarios,
   toggleRecargos,
+  toggleCalculoSemanal,
   EmpleadoService,
   crearEmpleadoConAcceso,
 } from "@/services/usuariosService";
@@ -90,6 +91,7 @@ interface FormularioUsuario {
   area: string;
   salarioBaseMensual: string;
   proyectos: string;
+  calculoSemanalActivo: boolean;
 }
 
 const FORM_INICIAL: FormularioUsuario = {
@@ -101,6 +103,7 @@ const FORM_INICIAL: FormularioUsuario = {
   area: "",
   salarioBaseMensual: "",
   proyectos: "",
+  calculoSemanalActivo: false,
 };
 
 export default function ConfiguracionAdmin() {
@@ -203,6 +206,7 @@ export default function ConfiguracionAdmin() {
       area: usuario.area || "",
       salarioBaseMensual: usuario.salarioBaseMensual.toString(),
       proyectos: usuario.proyectos?.join(", ") || "",
+      calculoSemanalActivo: usuario.calculoSemanalActivo ?? false,
     });
     setModalUsuarioAbierto(true);
   };
@@ -259,6 +263,7 @@ export default function ConfiguracionAdmin() {
         area: formulario.area.trim() || undefined,
         proyectos: proyectosArray.length > 0 ? proyectosArray : undefined,
         recargosActivos: true, // Default to true for new users
+        calculoSemanalActivo: formulario.calculoSemanalActivo,
       };
 
       if (usuarioEditando) {
@@ -317,6 +322,31 @@ export default function ConfiguracionAdmin() {
     } catch (err) {
       console.error("Error toggleRecargos:", err);
       mostrarMensaje("error", "Error al cambiar extras");
+    }
+  };
+
+  const handleToggleCalculoSemanal = async (
+    userId: string,
+    activar: boolean
+  ) => {
+    try {
+      await toggleCalculoSemanal(userId, activar);
+      setUsuarios((prev) =>
+        prev.map((u) =>
+          u.id === userId ? { ...u, calculoSemanalActivo: activar } : u
+        )
+      );
+
+      // Recalcular todas las jornadas del empleado para aplicar el nuevo método de cálculo
+      await recalcularJornadasEmpleado(userId);
+
+      mostrarMensaje(
+        "exito",
+        `Cálculo semanal ${activar ? "activado" : "desactivado"}`
+      );
+    } catch (err) {
+      console.error("Error toggleCalculoSemanal:", err);
+      mostrarMensaje("error", "Error al cambiar cálculo semanal");
     }
   };
 
@@ -419,6 +449,33 @@ export default function ConfiguracionAdmin() {
             continue;
           }
 
+          // Calculate accumulated weekly hours if weekly calculation is active
+          let horasAcumuladasSemana = 0;
+          if (empleado.calculoSemanalActivo) {
+            // Get all jornadas for the same week (Monday to Sunday)
+            const jornadaDate = new Date(jornada.fecha);
+            const weekStart = new Date(jornadaDate);
+            weekStart.setDate(jornadaDate.getDate() - jornadaDate.getDay()); // Monday
+            const weekEnd = new Date(weekStart);
+            weekEnd.setDate(weekStart.getDate() + 6); // Sunday
+
+            // Filter jornadas in the same week, before current jornada
+            const jornadasSemana = jornadas.filter((j) => {
+              const jDate = new Date(j.fecha);
+              return (
+                jDate >= weekStart &&
+                jDate <= weekEnd &&
+                j.fecha < jornada.fecha
+              );
+            });
+
+            // Sum total hours from previous jornadas in the week
+            horasAcumuladasSemana =
+              jornadasSemana.reduce((total, j) => {
+                return total + (j.totalHoras || 0);
+              }, 0) * 60; // Convert to minutes
+          }
+
           // Recalcular con el nuevo estado de recargos
           const calc = calcularDiaBasico(
             empleado.salarioBaseMensual ?? 0,
@@ -431,6 +488,8 @@ export default function ConfiguracionAdmin() {
               horaSalida: jornada.horaSalida,
               esDominicalFestivo: jornada.esDominicalFestivo,
               recargosActivos: empleado.recargosActivos ?? true,
+              calculoSemanalActivo: empleado.calculoSemanalActivo ?? false,
+              horasAcumuladasSemana,
             }
           );
 
@@ -577,6 +636,52 @@ export default function ConfiguracionAdmin() {
     );
   };
 
+  const CalculoSemanalButtonWithConfirm = ({
+    usuario,
+  }: {
+    usuario: Empleado & { calculoSemanalActivo?: boolean };
+  }) => {
+    const activar = !usuario.calculoSemanalActivo;
+
+    return (
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <button
+            className={`px-3 py-1 text-sm rounded-md transition-colors ${
+              usuario.calculoSemanalActivo
+                ? "bg-blue-50 text-blue-600 hover:bg-blue-100"
+                : "bg-gray-50 text-gray-600 hover:bg-gray-100"
+            }`}
+          >
+            {usuario.calculoSemanalActivo ? "Activado" : "Desactivado"}
+          </button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {activar
+                ? "Activar cálculo semanal"
+                : "Desactivar cálculo semanal"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {activar
+                ? `¿Deseas activar el cálculo semanal de horas extras para ${usuario.nombre}? Esto calculará extras basándose en horas acumuladas semanalmente (44 horas).`
+                : `¿Deseas desactivar el cálculo semanal de horas extras para ${usuario.nombre}?`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => handleToggleCalculoSemanal(usuario.id, activar)}
+            >
+              Confirmar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    );
+  };
+
   // ============================================================================
   // RENDER
   // ============================================================================
@@ -629,19 +734,20 @@ export default function ConfiguracionAdmin() {
                 <th className="p-3 text-left">Empresa</th>
                 <th className="p-3 text-center">Salario</th>
                 <th className="p-3 text-center">Extras</th>
+                <th className="p-3 text-center">Cálculo Semanal</th>
                 <th className="p-3 text-center">Acciones</th>
               </tr>
             </thead>
             <tbody>
               {cargandoUsuarios ? (
                 <tr>
-                  <td colSpan={8} className="p-6 text-center">
+                  <td colSpan={9} className="p-6 text-center">
                     Cargando usuarios...
                   </td>
                 </tr>
               ) : usuarios.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-6 text-center text-gray-500">
+                  <td colSpan={9} className="p-6 text-center text-gray-500">
                     No hay usuarios registrados
                   </td>
                 </tr>
@@ -669,6 +775,9 @@ export default function ConfiguracionAdmin() {
                     </td>
                     <td className="p-3 text-center">
                       <RecargosButtonWithConfirm usuario={u} />
+                    </td>
+                    <td className="p-3 text-center">
+                      <CalculoSemanalButtonWithConfirm usuario={u} />
                     </td>
                     <td className="p-3">
                       <div className="flex gap-2 justify-center">

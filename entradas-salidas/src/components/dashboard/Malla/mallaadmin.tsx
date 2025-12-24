@@ -323,6 +323,11 @@ export default function MallaEmpleadosPage() {
 
       // Recargar preview para reflejar cambios
       await buildPreviewForMonth(mesSeleccionado);
+
+      // Recalcular horas totales por empleado para reflejar cambios en horas extra
+      if (previewRows.length > 0) {
+        calcularHorasPorEmpleado();
+      }
     } catch (error) {
       console.error("Error agregando horas extra:", error);
       showMessage(
@@ -935,27 +940,21 @@ export default function MallaEmpleadosPage() {
           }
 
           // 🔍 Verificar si este empleado específico tiene datos de ESTE MES
+          const monthId = `${year}_${String(monthIndex + 1).padStart(2, "0")}`;
           const mallaRef = collection(
             db,
             "usuarios",
             row.uid,
             "malla",
-            String(year),
+            monthId,
             "dias"
-          );
-
-          // Buscar cualquier día de este mes para este empleado
-          const checkQuery = query(
-            mallaRef,
-            where("mes", "==", monthIndex + 1),
-            where("año", "==", year)
           );
 
           console.log(
             `🔍 Verificando ${row.nombre} (${row.documento}) - UID: ${row.uid}...`
           );
 
-          const existingDocs = await getDocs(checkQuery);
+          const existingDocs = await getDocs(mallaRef);
 
           if (!existingDocs.empty) {
             console.log(
@@ -1082,20 +1081,16 @@ export default function MallaEmpleadosPage() {
         for (const row of previewRows) {
           if (!row.uid) continue;
 
+          const monthId = `${year}_${String(monthIndex + 1).padStart(2, "0")}`;
           const mallaRef = collection(
             db,
             "usuarios",
             row.uid,
             "malla",
-            String(year),
+            monthId,
             "dias"
           );
-          const checkQuery = query(
-            mallaRef,
-            where("mes", "==", monthIndex + 1),
-            where("año", "==", year)
-          );
-          const existingDocs = await getDocs(checkQuery);
+          const existingDocs = await getDocs(mallaRef);
 
           if (!existingDocs.empty) {
             empleadosOmitidosTotal++;
