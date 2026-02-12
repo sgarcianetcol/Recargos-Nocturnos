@@ -663,105 +663,215 @@ export default function NominaResumen() {
   }
 
   // Nueva función para exportar detalle del empleado
-  const exportarDetalleEmpleado = async () => {
-    if (!detalleEmpleado || !modalJornadas.length) return;
+ const exportarDetalleEmpleado = async () => {
+  if (!detalleEmpleado || !modalJornadas.length) return;
 
-    const XLSX = await import("xlsx-js-style");
+  const XLSX = await import("xlsx-js-style");
 
-    // Construir datos detallados
-    const data = modalJornadas.map((j) => {
-      const esAutomatica = !!j.historial;
-      const inicio = esAutomatica
-        ? j.horaInicioReal?.toDate?.().toLocaleTimeString("es-CO", {
-            hour12: false,
-            hour: "2-digit",
-            minute: "2-digit",
-          }) ||
-          j.historial?.find((h: HistorialEntry) => h.accion === "inicio")?.hora
-        : j.horaEntrada;
-      const fin = esAutomatica
-        ? j.horaFinReal?.toDate?.().toLocaleTimeString("es-CO", {
-            hour12: false,
-            hour: "2-digit",
-            minute: "2-digit",
-          }) ||
-          j.historial?.find((h: HistorialEntry) => h.accion === "fin")?.hora
-        : j.horaSalida;
+  // =========================
+  // Función para fecha con día
+  // =========================
 
-      return {
-        Fecha: j.fecha,
-        "Tipo Jornada": esAutomatica
-          ? "Automática (Real)"
-          : "Manual (Programada)",
-        Turno: j.turnoId || "N/A",
-        "Hora Entrada": inicio || "N/A",
-        "Hora Salida": fin || "N/A",
-        "Horas Totales": j.horasNormales ?? 0,
-        "Recargo Nocturno Ordinario": j.recargoNocturnoOrdinario ?? 0,
-        "Recargo Festivo Diurno": j.recargoFestivoDiurno ?? 0,
-        "Recargo Festivo Nocturno": j.recargoFestivoNocturno ?? 0,
-        "Extras Diurnas": j.extrasDiurnas ?? 0,
-        "Extras Nocturnas": j.extrasNocturnas ?? 0,
-        "Extras Diurnas Dominical": j.extrasDiurnasDominical ?? 0,
-        "Extras Nocturnas Dominical": j.extrasNocturnasDominical ?? 0,
-        "Total Horas": j.totalHoras ?? 0,
-        "Valor Total Día": j.valorTotalDia ?? 0,
-        Estado: j.estado,
-        "Creado En":
-          j.creadoEn && typeof j.creadoEn === "object" && "toDate" in j.creadoEn
-            ? j.creadoEn.toDate().toLocaleString()
-            : "N/A",
-      };
-    });
+const formatDateWithDay = (
+  fecha: string | Date | Timestamp | undefined
+): string => {
+  if (!fecha) return "N/A";
 
-    // Crear hoja
-    const ws = XLSX.utils.json_to_sheet(data);
+  let date: Date;
 
-    // Estilos
-    const range = XLSX.utils.decode_range(ws["!ref"]!);
-    for (let R = range.s.r; R <= range.e.r; ++R) {
-      for (let C = range.s.c; C <= range.e.c; ++C) {
-        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
-        const cell = ws[cellAddress];
-        if (!cell) continue;
+  if (fecha instanceof Date) {
+    date = fecha;
+  } else if (fecha instanceof Timestamp) {
+    date = fecha.toDate();
+  } else {
+    date = new Date(fecha);
+  }
 
-        const isHeader = R === 0;
+  const days = [
+    "Domingo",
+    "Lunes",
+    "Martes",
+    "Miércoles",
+    "Jueves",
+    "Viernes",
+    "Sábado",
+  ];
 
-        cell.s = {
-          font: {
-            name: "Calibri",
-            sz: 10,
-            bold: isHeader,
-          },
-          alignment: {
-            horizontal: "center",
-            vertical: "center",
-            wrapText: true,
-          },
-          fill: isHeader ? { fgColor: { rgb: "E9ECEF" } } : undefined,
-          border: {
-            top: { style: "thin", color: { rgb: "000000" } },
-            bottom: { style: "thin", color: { rgb: "000000" } },
-            left: { style: "thin", color: { rgb: "000000" } },
-            right: { style: "thin", color: { rgb: "000000" } },
-          },
-        };
-      }
+  const dayName = days[date.getDay()];
+  const formattedDate = date.toLocaleDateString("es-CO");
+
+  return `${formattedDate} (${dayName})`;
+};
+
+
+  // =========================
+  // Construir datos detallados
+  // =========================
+  const data = modalJornadas.map((j) => {
+    const esAutomatica = !!j.historial;
+
+    const inicio = esAutomatica
+      ? j.horaInicioReal?.toDate?.().toLocaleTimeString("es-CO", {
+          hour12: false,
+          hour: "2-digit",
+          minute: "2-digit",
+        }) ||
+        j.historial?.find((h: HistorialEntry) => h.accion === "inicio")?.hora
+      : j.horaEntrada;
+
+    const fin = esAutomatica
+      ? j.horaFinReal?.toDate?.().toLocaleTimeString("es-CO", {
+          hour12: false,
+          hour: "2-digit",
+          minute: "2-digit",
+        }) ||
+        j.historial?.find((h: HistorialEntry) => h.accion === "fin")?.hora
+      : j.horaSalida;
+
+    return {
+      Fecha: formatDateWithDay(j.fecha),
+      "Tipo Jornada": esAutomatica
+        ? "Automática (Real)"
+        : "Manual (Programada)",
+      Turno: j.turnoId || "N/A",
+      "Hora Entrada": inicio || "N/A",
+      "Hora Salida": fin || "N/A",
+      "Horas Normales": j.horasNormales ?? 0,
+      "Recargo Nocturno Ordinario": j.recargoNocturnoOrdinario ?? 0,
+      "Recargo Festivo Diurno": j.recargoFestivoDiurno ?? 0,
+      "Recargo Festivo Nocturno": j.recargoFestivoNocturno ?? 0,
+      "Extras Diurnas": j.extrasDiurnas ?? 0,
+      "Extras Nocturnas": j.extrasNocturnas ?? 0,
+      "Extras Diurnas Dominical": j.extrasDiurnasDominical ?? 0,
+      "Extras Nocturnas Dominical": j.extrasNocturnasDominical ?? 0,
+      "Total Horas": j.totalHoras ?? 0,
+      "Valor Total Día": j.valorTotalDia ?? 0,
+      Estado: j.estado ?? "",
+      "Creado En":
+        j.creadoEn && typeof j.creadoEn === "object" && "toDate" in j.creadoEn
+          ? j.creadoEn.toDate().toLocaleString()
+          : "N/A",
+    };
+  });
+
+  // =========================
+  // Calcular totales
+  // =========================
+  const totales = modalJornadas.reduce(
+    (acc, j) => {
+      acc.horasNormales += j.horasNormales ?? 0;
+      acc.recargoNocturnoOrdinario += j.recargoNocturnoOrdinario ?? 0;
+      acc.recargoFestivoDiurno += j.recargoFestivoDiurno ?? 0;
+      acc.recargoFestivoNocturno += j.recargoFestivoNocturno ?? 0;
+      acc.extrasDiurnas += j.extrasDiurnas ?? 0;
+      acc.extrasNocturnas += j.extrasNocturnas ?? 0;
+      acc.extrasDiurnasDominical += j.extrasDiurnasDominical ?? 0;
+      acc.extrasNocturnasDominical += j.extrasNocturnasDominical ?? 0;
+      acc.totalHoras += j.totalHoras ?? 0;
+      acc.valorTotalDia += j.valorTotalDia ?? 0;
+      return acc;
+    },
+    {
+      horasNormales: 0,
+      recargoNocturnoOrdinario: 0,
+      recargoFestivoDiurno: 0,
+      recargoFestivoNocturno: 0,
+      extrasDiurnas: 0,
+      extrasNocturnas: 0,
+      extrasDiurnasDominical: 0,
+      extrasNocturnasDominical: 0,
+      totalHoras: 0,
+      valorTotalDia: 0,
     }
+  );
 
-    // Ajustar ancho columnas
-    ws["!cols"] = Object.keys(data[0]).map((k) => ({
-      wch: Math.max(15, k.length + 2),
-    }));
+  // Agregar fila total
+  data.push({
+    Fecha: "TOTALES",
+    "Tipo Jornada": "",
+    Turno: "",
+    "Hora Entrada": "",
+    "Hora Salida": "",
+    "Horas Normales": totales.horasNormales,
+    "Recargo Nocturno Ordinario": totales.recargoNocturnoOrdinario,
+    "Recargo Festivo Diurno": totales.recargoFestivoDiurno,
+    "Recargo Festivo Nocturno": totales.recargoFestivoNocturno,
+    "Extras Diurnas": totales.extrasDiurnas,
+    "Extras Nocturnas": totales.extrasNocturnas,
+    "Extras Diurnas Dominical": totales.extrasDiurnasDominical,
+    "Extras Nocturnas Dominical": totales.extrasNocturnasDominical,
+    "Total Horas": totales.totalHoras,
+    "Valor Total Día": totales.valorTotalDia,
+Estado: "calculado",
+    "Creado En": "",
+  });
 
-    // Crear libro y guardar
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Detalle_Jornadas");
-    XLSX.writeFile(
-      wb,
-      `detalle_${detalleEmpleado.nombre.replace(/\s+/g, "_")}.xlsx`
-    );
-  };
+  // =========================
+  // Crear hoja
+  // =========================
+  const ws = XLSX.utils.json_to_sheet(data);
+
+  // =========================
+  // Estilos
+  // =========================
+  const range = XLSX.utils.decode_range(ws["!ref"]!);
+
+  for (let R = range.s.r; R <= range.e.r; ++R) {
+    for (let C = range.s.c; C <= range.e.c; ++C) {
+      const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+      const cell = ws[cellAddress];
+      if (!cell) continue;
+
+      const isHeader = R === 0;
+      const isTotalRow = R === range.e.r;
+
+      // Formato moneda en columna Valor Total Día
+      if (C === Object.keys(data[0]).indexOf("Valor Total Día") && R !== 0) {
+        cell.z = '"$"#,##0';
+      }
+
+      cell.s = {
+        font: {
+          name: "Calibri",
+          sz: 10,
+          bold: isHeader || isTotalRow,
+        },
+        alignment: {
+          horizontal: "center",
+          vertical: "center",
+          wrapText: true,
+        },
+        fill: isHeader
+          ? { fgColor: { rgb: "E9ECEF" } }
+          : isTotalRow
+          ? { fgColor: { rgb: "D4EDDA" } }
+          : undefined,
+        border: {
+          top: { style: "thin", color: { rgb: "000000" } },
+          bottom: { style: "thin", color: { rgb: "000000" } },
+          left: { style: "thin", color: { rgb: "000000" } },
+          right: { style: "thin", color: { rgb: "000000" } },
+        },
+      };
+    }
+  }
+
+  // Ajustar ancho columnas
+  ws["!cols"] = Object.keys(data[0]).map((k) => ({
+    wch: Math.max(18, k.length + 2),
+  }));
+
+  // =========================
+  // Crear libro y guardar
+  // =========================
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Detalle_Jornadas");
+
+  XLSX.writeFile(
+    wb,
+    `detalle_${detalleEmpleado.nombre.replace(/\s+/g, "_")}.xlsx`
+  );
+};
 
   return (
     <div className="p-6 space-y-4">
