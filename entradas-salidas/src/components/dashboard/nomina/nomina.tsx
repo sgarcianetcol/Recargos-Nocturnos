@@ -95,7 +95,7 @@ export default function NominaResumen() {
     const cargarJornadas = async () => {
       try {
         console.log(
-          `⏳ Cargando jornadas de ${detalleEmpleado.nombre} desde ${fechaInicio} hasta ${fechaFin}...`
+          `⏳ Cargando jornadas de ${detalleEmpleado.nombre} desde ${fechaInicio} hasta ${fechaFin}...`,
         );
 
         const resultado = await getDetalleEmpleado({
@@ -135,7 +135,7 @@ export default function NominaResumen() {
           : query(
               collectionGroup(db, "jornadas"),
               where("empresa", "==", empresa),
-              ...base
+              ...base,
             );
 
       const snap = await getDocs(q);
@@ -229,71 +229,75 @@ export default function NominaResumen() {
           map.set(j.userId, r);
         }
 
-        r.hNormales += isNaN(j.horasNormales) ? 0 : j.horasNormales ?? 0;
+        r.hNormales += isNaN(j.horasNormales) ? 0 : (j.horasNormales ?? 0);
         r.hExtras +=
-          (isNaN(j.extrasDiurnas) ? 0 : j.extrasDiurnas ?? 0) +
-          (isNaN(j.extrasNocturnas) ? 0 : j.extrasNocturnas ?? 0) +
+          (isNaN(j.extrasDiurnas) ? 0 : (j.extrasDiurnas ?? 0)) +
+          (isNaN(j.extrasNocturnas) ? 0 : (j.extrasNocturnas ?? 0)) +
           (isNaN(j.extrasDiurnasDominical)
             ? 0
-            : j.extrasDiurnasDominical ?? 0) +
+            : (j.extrasDiurnasDominical ?? 0)) +
           (isNaN(j.extrasNocturnasDominical)
             ? 0
-            : j.extrasNocturnasDominical ?? 0);
+            : (j.extrasNocturnasDominical ?? 0));
 
         r.hExtrasDiurnas =
           (r.hExtrasDiurnas ?? 0) +
-          (isNaN(j.extrasDiurnas) ? 0 : j.extrasDiurnas ?? 0) +
-          (isNaN(j.extrasDiurnasDominical) ? 0 : j.extrasDiurnasDominical ?? 0);
+          (isNaN(j.extrasDiurnas) ? 0 : (j.extrasDiurnas ?? 0)) +
+          (isNaN(j.extrasDiurnasDominical)
+            ? 0
+            : (j.extrasDiurnasDominical ?? 0));
         r.hExtrasNocturnas =
           (r.hExtrasNocturnas ?? 0) +
-          (isNaN(j.extrasNocturnas) ? 0 : j.extrasNocturnas ?? 0) +
+          (isNaN(j.extrasNocturnas) ? 0 : (j.extrasNocturnas ?? 0)) +
           (isNaN(j.extrasNocturnasDominical)
             ? 0
-            : j.extrasNocturnasDominical ?? 0);
+            : (j.extrasNocturnasDominical ?? 0));
         r.hDominicales =
           (r.hDominicales ?? 0) +
           (isNaN(j.extrasDiurnasDominical)
             ? 0
-            : j.extrasDiurnasDominical ?? 0) +
+            : (j.extrasDiurnasDominical ?? 0)) +
           (isNaN(j.extrasNocturnasDominical)
             ? 0
-            : j.extrasNocturnasDominical ?? 0);
+            : (j.extrasNocturnasDominical ?? 0));
 
         r.recargosH +=
           (isNaN(j.recargoNocturnoOrdinario)
             ? 0
-            : j.recargoNocturnoOrdinario ?? 0) +
-          (isNaN(j.recargoFestivoDiurno) ? 0 : j.recargoFestivoDiurno ?? 0) +
-          (isNaN(j.recargoFestivoNocturno) ? 0 : j.recargoFestivoNocturno ?? 0);
+            : (j.recargoNocturnoOrdinario ?? 0)) +
+          (isNaN(j.recargoFestivoDiurno) ? 0 : (j.recargoFestivoDiurno ?? 0)) +
+          (isNaN(j.recargoFestivoNocturno)
+            ? 0
+            : (j.recargoFestivoNocturno ?? 0));
 
         r.recargoNocturnoOrdinario += isNaN(j.recargoNocturnoOrdinario)
           ? 0
-          : j.recargoNocturnoOrdinario ?? 0;
+          : (j.recargoNocturnoOrdinario ?? 0);
         r.recargoFestivoDiurno += isNaN(j.recargoFestivoDiurno)
           ? 0
-          : j.recargoFestivoDiurno ?? 0;
+          : (j.recargoFestivoDiurno ?? 0);
         r.recargoFestivoNocturno += isNaN(j.recargoFestivoNocturno)
           ? 0
-          : j.recargoFestivoNocturno ?? 0;
-        r.extrasDiurnas += isNaN(j.extrasDiurnas) ? 0 : j.extrasDiurnas ?? 0;
+          : (j.recargoFestivoNocturno ?? 0);
+        r.extrasDiurnas += isNaN(j.extrasDiurnas) ? 0 : (j.extrasDiurnas ?? 0);
         r.extrasNocturnas += isNaN(j.extrasNocturnas)
           ? 0
-          : j.extrasNocturnas ?? 0;
+          : (j.extrasNocturnas ?? 0);
         r.extrasDiurnasDominical += isNaN(j.extrasDiurnasDominical)
           ? 0
-          : j.extrasDiurnasDominical ?? 0;
+          : (j.extrasDiurnasDominical ?? 0);
         r.extrasNocturnasDominical += isNaN(j.extrasNocturnasDominical)
           ? 0
-          : j.extrasNocturnasDominical ?? 0;
+          : (j.extrasNocturnasDominical ?? 0);
 
-        r.total$ += isNaN(j.valorTotalDia) ? 0 : j.valorTotalDia ?? 0;
+        r.total$ += isNaN(j.valorTotalDia) ? 0 : (j.valorTotalDia ?? 0);
         r.totalHoras += Number(j.totalHoras) || 0;
       }
 
       const rowsFinal = [...map.values()];
       console.log(
         "📊 Resultado final NominaRow (primeros 3):",
-        rowsFinal.slice(0, 3)
+        rowsFinal.slice(0, 3),
       );
 
       setRows(rowsFinal);
@@ -310,7 +314,7 @@ export default function NominaResumen() {
   }, [cargar]);
 
   const filtrados = rows.filter((r) =>
-    r.nombre.toLowerCase().includes(busqueda.toLowerCase())
+    r.nombre.toLowerCase().includes(busqueda.toLowerCase()),
   );
 
   const exportar = async () => {
@@ -382,26 +386,26 @@ export default function NominaResumen() {
       const horaBase = salario / 220;
       const valorHoraExtraDiurna = Math.round(horaBase * 1.25 * hExtraDiurna);
       const valorHoraExtraNocturna = Math.round(
-        horaBase * 1.75 * hExtraNocturna
+        horaBase * 1.75 * hExtraNocturna,
       );
       const valorHoraExtraDiurnaFestiva = Math.round(
-        horaBase * 2.05 * hExtraDiurnaFestiva
+        horaBase * 2.05 * hExtraDiurnaFestiva,
       );
       const valorHoraExtraFestivaNocturna = Math.round(
-        horaBase * 2.55 * hExtraFestivaNocturna
+        horaBase * 2.55 * hExtraFestivaNocturna,
       );
       const valorRecargoNocturno = Math.round(
-        horaBase * 0.35 * recargoNocturno
+        horaBase * 0.35 * recargoNocturno,
       );
       const valorRecargoDiurnoFestivo = Math.round(
-        horaBase * 0.8 * recargoDiurnoFestivo
+        horaBase * 0.8 * recargoDiurnoFestivo,
       );
       const valorRecargoFestivoNocturno = Math.round(
-        horaBase * 1.15 * recargoFestivoNocturno
+        horaBase * 1.15 * recargoFestivoNocturno,
       );
       const valorHddSinCom = Math.round(horaBase * 1.8 * hddSinCom);
       const valorHddConCompensatorio = Math.round(
-        horaBase * 0.8 * hddConCompensatorio
+        horaBase * 0.8 * hddConCompensatorio,
       );
 
       const total =
@@ -458,54 +462,54 @@ export default function NominaResumen() {
       CEDULA: "",
       SALARIO: 0,
       "HORA ORDINARIA (NO MODIFICAR)": Math.round(
-        calcularTotal("SALARIO") / 184
+        calcularTotal("SALARIO") / 184,
       ),
       FECHA: "",
       PROYECTO: "",
       "CANTIDAD HORA EXTRA DIURNA": calcularTotal("CANTIDAD HORA EXTRA DIURNA"),
       "CANTIDAD HORA EXTRA NOCTURNA": calcularTotal(
-        "CANTIDAD HORA EXTRA NOCTURNA"
+        "CANTIDAD HORA EXTRA NOCTURNA",
       ),
       "CANTIDAD HORA EXTRA DIURNA FESTIVA": calcularTotal(
-        "CANTIDAD HORA EXTRA DIURNA FESTIVA"
+        "CANTIDAD HORA EXTRA DIURNA FESTIVA",
       ),
       "CANTIDAD HORA EXTRA FESTIVA NOCTURNA": calcularTotal(
-        "CANTIDAD HORA EXTRA FESTIVA NOCTURNA"
+        "CANTIDAD HORA EXTRA FESTIVA NOCTURNA",
       ),
       "CANTIDAD RECARGO DIURNO FESTIVO": calcularTotal(
-        "CANTIDAD RECARGO DIURNO FESTIVO"
+        "CANTIDAD RECARGO DIURNO FESTIVO",
       ),
       "CANTIDAD RECARGO NOCTURNO": calcularTotal("CANTIDAD RECARGO NOCTURNO"),
       "CANTIDAD RECARGO FESTIVO NOCTURNO": calcularTotal(
-        "CANTIDAD RECARGO FESTIVO NOCTURNO"
+        "CANTIDAD RECARGO FESTIVO NOCTURNO",
       ),
       "CANTIDAD RECARGO FESTIVO DIURNO": calcularTotal(
-        "CANTIDAD RECARGO FESTIVO DIURNO"
+        "CANTIDAD RECARGO FESTIVO DIURNO",
       ),
       "CANTIDAD HDD SIN COM": calcularTotal("CANTIDAD HDD SIN COM"),
       "CANTIDAD HDD CON COMPENSATORIO": calcularTotal(
-        "CANTIDAD HDD CON COMPENSATORIO"
+        "CANTIDAD HDD CON COMPENSATORIO",
       ),
       "HORA EXTRA DIURNA (1.25)": calcularTotal("HORA EXTRA DIURNA (1.25)"),
       "HORA EXTRA NOCTURNA (1.75)": calcularTotal("HORA EXTRA NOCTURNA (1.75)"),
       "HORA EXTRA DIURNA FESTIVA (2.05)": calcularTotal(
-        "HORA EXTRA DIURNA FESTIVA (2.05)"
+        "HORA EXTRA DIURNA FESTIVA (2.05)",
       ),
       "HORA EXTRA FESTIVA NOCTURNA (2.55)": calcularTotal(
-        "HORA EXTRA FESTIVA NOCTURNA (2.55)"
+        "HORA EXTRA FESTIVA NOCTURNA (2.55)",
       ),
       "RECARGO NOCTURNO (0.35)": calcularTotal("RECARGO NOCTURNO (0.35)"),
       "RECARGO DIURNO FESTIVO (0.80)": calcularTotal(
-        "RECARGO DIURNO FESTIVO (0.80)"
+        "RECARGO DIURNO FESTIVO (0.80)",
       ),
       "RECARGO FESTIVO NOCTURNO (1.15)": calcularTotal(
-        "RECARGO FESTIVO NOCTURNO (1.15)"
+        "RECARGO FESTIVO NOCTURNO (1.15)",
       ),
       "HDD SIN COMPENSATORIO (1.80)": calcularTotal(
-        "HDD SIN COMPENSATORIO (1.80)"
+        "HDD SIN COMPENSATORIO (1.80)",
       ),
       "HDD CON COMPESATORÍO (0,80)": calcularTotal(
-        "HDD CON COMPESATORÍO (0,80)"
+        "HDD CON COMPESATORÍO (0,80)",
       ),
       TOTAL: calcularTotal("TOTAL"),
     };
@@ -631,7 +635,7 @@ export default function NominaResumen() {
   // 🔹 FUNCIÓN AUXILIAR PARA OBTENER EL MES CAUSADO EN FORMATO NOV-DIC
   function obtenerMesCausadoFormato(
     fechaInicio: string,
-    fechaFin: string
+    fechaFin: string,
   ): string {
     const fechaIni = new Date(fechaInicio);
     const fechaFinObj = new Date(fechaFin);
@@ -663,215 +667,208 @@ export default function NominaResumen() {
   }
 
   // Nueva función para exportar detalle del empleado
- const exportarDetalleEmpleado = async () => {
-  if (!detalleEmpleado || !modalJornadas.length) return;
+  const exportarDetalleEmpleado = async () => {
+    if (!detalleEmpleado || !modalJornadas.length) return;
 
-  const XLSX = await import("xlsx-js-style");
+    const XLSX = await import("xlsx-js-style");
 
-  // =========================
-  // Función para fecha con día
-  // =========================
+    // =========================
+    // Función para fecha con día
+    // =========================
 
-const formatDateWithDay = (
-  fecha: string | Date | Timestamp | undefined
-): string => {
-  if (!fecha) return "N/A";
+    const formatDateWithDay = (
+      fecha: string | Date | Timestamp | undefined,
+    ): string => {
+      if (!fecha) return "N/A";
 
-  let date: Date;
+      let date: Date;
 
-  if (fecha instanceof Date) {
-    date = fecha;
-  } else if (fecha instanceof Timestamp) {
-    date = fecha.toDate();
-  } else {
-    date = new Date(fecha);
-  }
-
-  const days = [
-    "Domingo",
-    "Lunes",
-    "Martes",
-    "Miércoles",
-    "Jueves",
-    "Viernes",
-    "Sábado",
-  ];
-
-  const dayName = days[date.getDay()];
-  const formattedDate = date.toLocaleDateString("es-CO");
-
-  return `${formattedDate} (${dayName})`;
-};
-
-
-  // =========================
-  // Construir datos detallados
-  // =========================
-  const data = modalJornadas.map((j) => {
-    const esAutomatica = !!j.historial;
-
-    const inicio = esAutomatica
-      ? j.horaInicioReal?.toDate?.().toLocaleTimeString("es-CO", {
-          hour12: false,
-          hour: "2-digit",
-          minute: "2-digit",
-        }) ||
-        j.historial?.find((h: HistorialEntry) => h.accion === "inicio")?.hora
-      : j.horaEntrada;
-
-    const fin = esAutomatica
-      ? j.horaFinReal?.toDate?.().toLocaleTimeString("es-CO", {
-          hour12: false,
-          hour: "2-digit",
-          minute: "2-digit",
-        }) ||
-        j.historial?.find((h: HistorialEntry) => h.accion === "fin")?.hora
-      : j.horaSalida;
-
-    return {
-      Fecha: formatDateWithDay(j.fecha),
-      "Tipo Jornada": esAutomatica
-        ? "Automática (Real)"
-        : "Manual (Programada)",
-      Turno: j.turnoId || "N/A",
-      "Hora Entrada": inicio || "N/A",
-      "Hora Salida": fin || "N/A",
-      "Horas Normales": j.horasNormales ?? 0,
-      "Recargo Nocturno Ordinario": j.recargoNocturnoOrdinario ?? 0,
-      "Recargo Festivo Diurno": j.recargoFestivoDiurno ?? 0,
-      "Recargo Festivo Nocturno": j.recargoFestivoNocturno ?? 0,
-      "Extras Diurnas": j.extrasDiurnas ?? 0,
-      "Extras Nocturnas": j.extrasNocturnas ?? 0,
-      "Extras Diurnas Dominical": j.extrasDiurnasDominical ?? 0,
-      "Extras Nocturnas Dominical": j.extrasNocturnasDominical ?? 0,
-      "Total Horas": j.totalHoras ?? 0,
-      "Valor Total Día": j.valorTotalDia ?? 0,
-      Estado: j.estado ?? "",
-      "Creado En":
-        j.creadoEn && typeof j.creadoEn === "object" && "toDate" in j.creadoEn
-          ? j.creadoEn.toDate().toLocaleString()
-          : "N/A",
-    };
-  });
-
-  // =========================
-  // Calcular totales
-  // =========================
-  const totales = modalJornadas.reduce(
-    (acc, j) => {
-      acc.horasNormales += j.horasNormales ?? 0;
-      acc.recargoNocturnoOrdinario += j.recargoNocturnoOrdinario ?? 0;
-      acc.recargoFestivoDiurno += j.recargoFestivoDiurno ?? 0;
-      acc.recargoFestivoNocturno += j.recargoFestivoNocturno ?? 0;
-      acc.extrasDiurnas += j.extrasDiurnas ?? 0;
-      acc.extrasNocturnas += j.extrasNocturnas ?? 0;
-      acc.extrasDiurnasDominical += j.extrasDiurnasDominical ?? 0;
-      acc.extrasNocturnasDominical += j.extrasNocturnasDominical ?? 0;
-      acc.totalHoras += j.totalHoras ?? 0;
-      acc.valorTotalDia += j.valorTotalDia ?? 0;
-      return acc;
-    },
-    {
-      horasNormales: 0,
-      recargoNocturnoOrdinario: 0,
-      recargoFestivoDiurno: 0,
-      recargoFestivoNocturno: 0,
-      extrasDiurnas: 0,
-      extrasNocturnas: 0,
-      extrasDiurnasDominical: 0,
-      extrasNocturnasDominical: 0,
-      totalHoras: 0,
-      valorTotalDia: 0,
-    }
-  );
-
-  // Agregar fila total
-  data.push({
-    Fecha: "TOTALES",
-    "Tipo Jornada": "",
-    Turno: "",
-    "Hora Entrada": "",
-    "Hora Salida": "",
-    "Horas Normales": totales.horasNormales,
-    "Recargo Nocturno Ordinario": totales.recargoNocturnoOrdinario,
-    "Recargo Festivo Diurno": totales.recargoFestivoDiurno,
-    "Recargo Festivo Nocturno": totales.recargoFestivoNocturno,
-    "Extras Diurnas": totales.extrasDiurnas,
-    "Extras Nocturnas": totales.extrasNocturnas,
-    "Extras Diurnas Dominical": totales.extrasDiurnasDominical,
-    "Extras Nocturnas Dominical": totales.extrasNocturnasDominical,
-    "Total Horas": totales.totalHoras,
-    "Valor Total Día": totales.valorTotalDia,
-Estado: "calculado",
-    "Creado En": "",
-  });
-
-  // =========================
-  // Crear hoja
-  // =========================
-  const ws = XLSX.utils.json_to_sheet(data);
-
-  // =========================
-  // Estilos
-  // =========================
-  const range = XLSX.utils.decode_range(ws["!ref"]!);
-
-  for (let R = range.s.r; R <= range.e.r; ++R) {
-    for (let C = range.s.c; C <= range.e.c; ++C) {
-      const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
-      const cell = ws[cellAddress];
-      if (!cell) continue;
-
-      const isHeader = R === 0;
-      const isTotalRow = R === range.e.r;
-
-      // Formato moneda en columna Valor Total Día
-      if (C === Object.keys(data[0]).indexOf("Valor Total Día") && R !== 0) {
-        cell.z = '"$"#,##0';
+      if (fecha instanceof Date) {
+        date = fecha;
+      } else if (fecha instanceof Timestamp) {
+        date = fecha.toDate();
+      } else {
+        const partes = String(fecha).split("-");
+        date = new Date(
+          Number(partes[0]),
+          Number(partes[1]) - 1,
+          Number(partes[2]),
+        );
       }
 
-      cell.s = {
-        font: {
-          name: "Calibri",
-          sz: 10,
-          bold: isHeader || isTotalRow,
-        },
-        alignment: {
-          horizontal: "center",
-          vertical: "center",
-          wrapText: true,
-        },
-        fill: isHeader
-          ? { fgColor: { rgb: "E9ECEF" } }
-          : isTotalRow
-          ? { fgColor: { rgb: "D4EDDA" } }
-          : undefined,
-        border: {
-          top: { style: "thin", color: { rgb: "000000" } },
-          bottom: { style: "thin", color: { rgb: "000000" } },
-          left: { style: "thin", color: { rgb: "000000" } },
-          right: { style: "thin", color: { rgb: "000000" } },
-        },
+      const days = [
+        "Domingo",
+        "Lunes",
+        "Martes",
+        "Miércoles",
+        "Jueves",
+        "Viernes",
+        "Sábado",
+      ];
+
+      const dayName = days[date.getDay()];
+      const formattedDate = date.toLocaleDateString("es-CO");
+
+      return `${formattedDate} (${dayName})`;
+    };
+
+    // =========================
+    // Construir datos detallados
+    // =========================
+    const data = modalJornadas.map((j) => {
+      const esAutomatica = !!j.historial;
+
+      const inicio = esAutomatica
+        ? j.horaInicioReal?.toDate?.().toLocaleTimeString("es-CO", {
+            hour12: false,
+            hour: "2-digit",
+            minute: "2-digit",
+          }) ||
+          j.historial?.find((h: HistorialEntry) => h.accion === "inicio")?.hora
+        : j.horaEntrada;
+
+      const fin = esAutomatica
+        ? j.horaFinReal?.toDate?.().toLocaleTimeString("es-CO", {
+            hour12: false,
+            hour: "2-digit",
+            minute: "2-digit",
+          }) ||
+          j.historial?.find((h: HistorialEntry) => h.accion === "fin")?.hora
+        : j.horaSalida;
+
+      return {
+        Fecha: formatDateWithDay(j.fecha),
+        Turno: j.turnoId || "N/A",
+        "Hora Entrada": inicio || "N/A",
+        "Hora Salida": fin || "N/A",
+        "Horas Normales": j.horasNormales ?? 0,
+        "Recargo Nocturno Ordinario": j.recargoNocturnoOrdinario ?? 0,
+        "Recargo Festivo Diurno": j.recargoFestivoDiurno ?? 0,
+        "Recargo Festivo Nocturno": j.recargoFestivoNocturno ?? 0,
+        "Extras Diurnas": j.extrasDiurnas ?? 0,
+        "Extras Nocturnas": j.extrasNocturnas ?? 0,
+        "Extras Diurnas Dominical": j.extrasDiurnasDominical ?? 0,
+        "Extras Nocturnas Dominical": j.extrasNocturnasDominical ?? 0,
+        "Total Horas": j.totalHoras ?? 0,
+        "Valor Total Día": j.valorTotalDia ?? 0,
       };
+    });
+
+    // =========================
+    // Calcular totales
+    // =========================
+    const totales = modalJornadas.reduce(
+      (acc, j) => {
+        acc.horasNormales += j.horasNormales ?? 0;
+        acc.recargoNocturnoOrdinario += j.recargoNocturnoOrdinario ?? 0;
+        acc.recargoFestivoDiurno += j.recargoFestivoDiurno ?? 0;
+        acc.recargoFestivoNocturno += j.recargoFestivoNocturno ?? 0;
+        acc.extrasDiurnas += j.extrasDiurnas ?? 0;
+        acc.extrasNocturnas += j.extrasNocturnas ?? 0;
+        acc.extrasDiurnasDominical += j.extrasDiurnasDominical ?? 0;
+        acc.extrasNocturnasDominical += j.extrasNocturnasDominical ?? 0;
+        acc.totalHoras += j.totalHoras ?? 0;
+        acc.valorTotalDia += j.valorTotalDia ?? 0;
+        return acc;
+      },
+      {
+        horasNormales: 0,
+        recargoNocturnoOrdinario: 0,
+        recargoFestivoDiurno: 0,
+        recargoFestivoNocturno: 0,
+        extrasDiurnas: 0,
+        extrasNocturnas: 0,
+        extrasDiurnasDominical: 0,
+        extrasNocturnasDominical: 0,
+        totalHoras: 0,
+        valorTotalDia: 0,
+      },
+    );
+
+    // Agregar fila total
+    data.push({
+      Fecha: "TOTALES",
+      Turno: "",
+      "Hora Entrada": "",
+      "Hora Salida": "",
+      "Horas Normales": totales.horasNormales,
+      "Recargo Nocturno Ordinario": totales.recargoNocturnoOrdinario,
+      "Recargo Festivo Diurno": totales.recargoFestivoDiurno,
+      "Recargo Festivo Nocturno": totales.recargoFestivoNocturno,
+      "Extras Diurnas": totales.extrasDiurnas,
+      "Extras Nocturnas": totales.extrasNocturnas,
+      "Extras Diurnas Dominical": totales.extrasDiurnasDominical,
+      "Extras Nocturnas Dominical": totales.extrasNocturnasDominical,
+      "Total Horas": totales.totalHoras,
+      "Valor Total Día": totales.valorTotalDia,
+    });
+
+    // =========================
+    // Crear hoja
+    // =========================
+    const ws = XLSX.utils.json_to_sheet(data);
+
+    // =========================
+    // Estilos
+    // =========================
+    const range = XLSX.utils.decode_range(ws["!ref"]!);
+
+    for (let R = range.s.r; R <= range.e.r; ++R) {
+      for (let C = range.s.c; C <= range.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        const cell = ws[cellAddress];
+        if (!cell) continue;
+
+        const isHeader = R === 0;
+        const isTotalRow = R === range.e.r;
+
+        // Formato moneda en columna Valor Total Día
+        if (C === Object.keys(data[0]).indexOf("Valor Total Día") && R !== 0) {
+          cell.z = '"$"#,##0';
+        }
+
+        cell.s = {
+          font: {
+            name: "Calibri",
+            sz: 10,
+            bold: isHeader || isTotalRow,
+          },
+          alignment: {
+            horizontal: "center",
+            vertical: "center",
+            wrapText: true,
+          },
+          fill: isHeader
+            ? { fgColor: { rgb: "E9ECEF" } }
+            : isTotalRow
+              ? { fgColor: { rgb: "D4EDDA" } }
+              : undefined,
+          border: {
+            top: { style: "thin", color: { rgb: "000000" } },
+            bottom: { style: "thin", color: { rgb: "000000" } },
+            left: { style: "thin", color: { rgb: "000000" } },
+            right: { style: "thin", color: { rgb: "000000" } },
+          },
+        };
+      }
     }
-  }
 
-  // Ajustar ancho columnas
-  ws["!cols"] = Object.keys(data[0]).map((k) => ({
-    wch: Math.max(18, k.length + 2),
-  }));
+    // Ajustar ancho columnas
+    ws["!cols"] = Object.keys(data[0]).map((k) => ({
+      wch: Math.max(18, k.length + 2),
+    }));
 
-  // =========================
-  // Crear libro y guardar
-  // =========================
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Detalle_Jornadas");
+    // =========================
+    // Crear libro y guardar
+    // =========================
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Detalle_Jornadas");
 
-  XLSX.writeFile(
-    wb,
-    `detalle_${detalleEmpleado.nombre.replace(/\s+/g, "_")}.xlsx`
-  );
-};
+    XLSX.writeFile(
+      wb,
+      `detalle_${detalleEmpleado.nombre.replace(/\s+/g, "_")}.xlsx`,
+    );
+  };
 
   return (
     <div className="p-6 space-y-4">
@@ -1079,7 +1076,7 @@ Estado: "calculado",
                             minute: "2-digit",
                           }) ||
                         j.historial?.find(
-                          (h: HistorialEntry) => h.accion === "inicio"
+                          (h: HistorialEntry) => h.accion === "inicio",
                         )?.hora
                       : j.horaEntrada;
                     const fin = esAutomatica
@@ -1089,21 +1086,21 @@ Estado: "calculado",
                           minute: "2-digit",
                         }) ||
                         j.historial?.find(
-                          (h: HistorialEntry) => h.accion === "fin"
+                          (h: HistorialEntry) => h.accion === "fin",
                         )?.hora
                       : j.horaSalida;
 
                     const ubicacionInicio = esAutomatica
                       ? j.ubicacionInicio ||
                         j.historial?.find(
-                          (h: HistorialEntry) => h.accion === "inicio"
+                          (h: HistorialEntry) => h.accion === "inicio",
                         )?.ubicacion
                       : null;
 
                     const ubicacionFin = esAutomatica
                       ? j.ubicacionFin ||
                         j.historial?.find(
-                          (h: HistorialEntry) => h.accion === "fin"
+                          (h: HistorialEntry) => h.accion === "fin",
                         )?.ubicacion
                       : null;
 
@@ -1204,7 +1201,7 @@ Estado: "calculado",
                               <div className="col-span-2 font-semibold text-green-600">
                                 Valor Total Día: $
                                 {Math.round(
-                                  j.valorTotalDia || 0
+                                  j.valorTotalDia || 0,
                                 ).toLocaleString("es-CO")}
                               </div>
                             </div>
